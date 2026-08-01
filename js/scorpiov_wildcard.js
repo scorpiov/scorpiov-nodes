@@ -35,76 +35,124 @@ const BRACE_COLORS  = ["#e5c07b", "#c586c0", "#56b6c2", "#98c379"]; // { } nesti
 const PAREN_COLORS  = ["#61afef", "#d19a66", "#e06c75", "#c678dd"]; // ( ) nesting depth
 const WEIGHT_COLOR  = "#e5e510"; // the ":1.5" weight number
 const COMMENT_COLOR = "#6a9955";
+const WARN_COLOR    = "#f14c4c"; // stray closing bracket/paren with nothing open to match
 
 function escapeHtml(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function highlight(raw, warningLabel) {
-    const lines = raw.split("\n");
     let inBlock = false;
     let braceDepth = 0;
     let parenDepth = 0;
+    let braceOrphanCloses = 0; // a "}" seen with nothing open to match it
+    let parenOrphanCloses = 0; // a ")" seen with nothing open to match it
 
-    const htmlLines = lines.map((line) => {
-        const trimmed = line.trim();
+    function commentSpan(text) {
+        return `<span style="color:${COMMENT_COLOR} !important;font-style:italic">${escapeHtml(text)}</span>`;
+    }
 
-        if (inBlock) {
-            if (trimmed === "*/") inBlock = false;
-            return `<span style="color:${COMMENT_COLOR};font-style:italic">${escapeHtml(line)}</span>`;
-        }
-        if (trimmed === "/*") {
-            inBlock = true;
-            return `<span style="color:${COMMENT_COLOR};font-style:italic">${escapeHtml(line)}</span>`;
-        }
-        if (trimmed.startsWith("#")) {
-            return `<span style="color:${COMMENT_COLOR};font-style:italic">${escapeHtml(line)}</span>`;
-        }
-
-        const hashIdx = line.indexOf("#");
-        const livePart = hashIdx === -1 ? line : line.slice(0, hashIdx);
-        const commentPart = hashIdx === -1 ? "" : line.slice(hashIdx);
-
-        let colored = "";
+    // Colors the "live" (non-comment) portion of a line: { } ( ) and
+    // :weight numbers. Reads/writes the outer braceDepth/parenDepth/orphan
+    // counters so nesting depth and orphan-close detection carry correctly
+    // across the whole text, not just within one line.
+    function colorLive(text) {
+        let out = "";
         let i = 0;
-        while (i < livePart.length) {
-            const ch = livePart[i];
+        while (i < text.length) {
+            const ch = text[i];
 
             if (ch === "{") {
-                colored += `<span style="color:${BRACE_COLORS[braceDepth % BRACE_COLORS.length]}">{</span>`;
+                out += `<span style="color:${BRACE_COLORS[braceDepth % BRACE_COLORS.length]} !important">{</span>`;
                 braceDepth++;
                 i++;
             } else if (ch === "}") {
-                braceDepth = Math.max(0, braceDepth - 1);
-                colored += `<span style="color:${BRACE_COLORS[braceDepth % BRACE_COLORS.length]}">}</span>`;
+                if (braceDepth === 0) {
+                    braceOrphanCloses++;
+                    out += `<span style="color:${WARN_COLOR} !important;font-weight:bold">}</span>`;
+                } else {
+                    braceDepth--;
+                    out += `<span style="color:${BRACE_COLORS[braceDepth % BRACE_COLORS.length]} !important">}</span>`;
+                }
                 i++;
             } else if (ch === "(") {
-                colored += `<span style="color:${PAREN_COLORS[parenDepth % PAREN_COLORS.length]}">(</span>`;
+                out += `<span style="color:${PAREN_COLORS[parenDepth % PAREN_COLORS.length]} !important">(</span>`;
                 parenDepth++;
                 i++;
             } else if (ch === ")") {
-                parenDepth = Math.max(0, parenDepth - 1);
-                colored += `<span style="color:${PAREN_COLORS[parenDepth % PAREN_COLORS.length]}">)</span>`;
+                if (parenDepth === 0) {
+                    parenOrphanCloses++;
+                    out += `<span style="color:${WARN_COLOR} !important;font-weight:bold">)</span>`;
+                } else {
+                    parenDepth--;
+                    out += `<span style="color:${PAREN_COLORS[parenDepth % PAREN_COLORS.length]} !important">)</span>`;
+                }
                 i++;
-            } else if (ch === ":" && /^-?\d*\.?\d+/.test(livePart.slice(i + 1))) {
-                const match = livePart.slice(i + 1).match(/^-?\d*\.?\d+/)[0];
-                colored += `<span style="color:${WEIGHT_COLOR}">:${escapeHtml(match)}</span>`;
+            } else if (ch === ":" && /^-?\d*\.?\d+/.test(text.slice(i + 1))) {
+                const match = text.slice(i + 1).match(/^-?\d*\.?\d+/)[0];
+                out += `<span style="color:${WEIGHT_COLOR} !important">:${escapeHtml(match)}</span>`;
                 i += 1 + match.length;
             } else {
-                colored += escapeHtml(ch);
+                out += escapeHtml(ch);
                 i++;
             }
         }
+        return out;
+    }
 
-        return colored + (commentPart
-            ? `<span style="color:${COMMENT_COLOR};font-style:italic">${escapeHtml(commentPart)}</span>`
-            : "");
-    });
+    // Scans one line as a sequence of segments, switching between "live"
+    // and "comment" coloring wherever # or /* or */ actually appear --
+    // not just when they sit alone on their own line. Mirrors
+    // _strip_comments_from_lines() in scorpiov_wildcard.py.
+    function highlightLine(line) {
+        let out = "";
+        let i = 0;
+
+        while (i < line.length) {
+            if (inBlock) {
+                const endIdx = line.indexOf("*/", i);
+                if (endIdx === -1) {
+                    out += commentSpan(line.slice(i));
+                    i = line.length;
+                } else {
+                    out += commentSpan(line.slice(i, endIdx + 2));
+                    i = endIdx + 2;
+                    inBlock = false;
+                }
+                continue;
+            }
+
+            const hashIdx  = line.indexOf("#", i);
+            const blockIdx = line.indexOf("/*", i);
+            const hasHash  = hashIdx !== -1;
+            const hasBlock = blockIdx !== -1;
+            const hashFirst = hasHash && (!hasBlock || hashIdx <= blockIdx);
+
+            if (!hasHash && !hasBlock) {
+                out += colorLive(line.slice(i));
+                i = line.length;
+            } else if (hashFirst) {
+                out += colorLive(line.slice(i, hashIdx));
+                out += commentSpan(line.slice(hashIdx)); // # runs to end of line
+                i = line.length;
+            } else {
+                out += colorLive(line.slice(i, blockIdx));
+                inBlock = true;
+                i = blockIdx; // handled by the inBlock branch on next loop pass
+            }
+        }
+
+        return out;
+    }
+
+    const htmlLines = raw.split("\n").map(highlightLine);
 
     if (warningLabel) {
         const warnings = [];
         if (braceDepth > 0) warnings.push(`${braceDepth} unclosed {`);
         if (parenDepth > 0) warnings.push(`${parenDepth} unclosed (`);
+        if (braceOrphanCloses > 0) warnings.push(`${braceOrphanCloses} stray } with no matching {`);
+        if (parenOrphanCloses > 0) warnings.push(`${parenOrphanCloses} stray ) with no matching (`);
         warningLabel.textContent = warnings.length ? `⚠ ${warnings.join(", ")}` : "";
     }
 

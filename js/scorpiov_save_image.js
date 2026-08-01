@@ -118,15 +118,16 @@ app.registerExtension({
             );
             node._scorpiovAdvancedToggle = toggleWidget;
 
-            // Move the toggle button to sit right above model_name (the
-            // first advanced field), instead of wherever addWidget happened
-            // to append it, so it reads naturally in place.
-            const firstAdvancedIdx = node.widgets.indexOf(getWidget(node, ADVANCED_FIELD_NAMES[0]));
-            if (firstAdvancedIdx !== -1) {
-                const curIdx = node.widgets.indexOf(toggleWidget);
-                node.widgets.splice(curIdx, 1);
-                node.widgets.splice(firstAdvancedIdx, 0, toggleWidget);
-            }
+            // IMPORTANT: this button is intentionally left wherever
+            // addWidget naturally appends it (after model_hash, the last
+            // optional field) rather than spliced up above model_name.
+            // Splicing a widget into the MIDDLE of node.widgets shifts
+            // every widget after it by one array slot, which corrupts
+            // widgets_values on any already-saved workflow -- the exact
+            // bug documented in the dev reference §3.7/§5.5. That rule
+            // applies to front-end widgets too: append only, never insert
+            // mid-array, even though the toggle reading naturally "above"
+            // the fields it controls would look nicer.
 
             applyAdvancedState(node, true);
 

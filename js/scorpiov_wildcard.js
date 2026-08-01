@@ -318,18 +318,20 @@ app.registerExtension({
             // Guard: onNodeCreated can fire more than once on the same node.
             // Without this, a second highlighted-preview widget gets added
             // each time it fires, duplicating it and shifting other widgets.
+            //
+            // IMPORTANT: this widget is intentionally left wherever
+            // addDOMWidget naturally appends it (after mode/seed/etc, before
+            // the Refresh button and Resolved Prompt) rather than spliced up
+            // next to "text". Splicing a widget into the MIDDLE of
+            // node.widgets shifts every widget after it by one array slot,
+            // which corrupts widgets_values on any already-saved workflow —
+            // the exact same bug documented in the dev reference §3.7/§5.5
+            // for backend INPUT_TYPES fields. That rule applies here too:
+            // any new widget, front-end or back-end, only ever gets APPENDED,
+            // never inserted mid-array, no matter how much nicer a different
+            // position would look.
             if (!node._scorpiovHighlightAdded) {
-                const previewWidget = addHighlightedPreview(node);
-
-                // Move it to sit right after the real "text" widget, so it
-                // visually reads as "the colored version of the box above".
-                const textIdx = node.widgets.indexOf(getWidget(node, "text"));
-                if (textIdx !== -1) {
-                    const curIdx = node.widgets.indexOf(previewWidget);
-                    node.widgets.splice(curIdx, 1);
-                    node.widgets.splice(textIdx + 1, 0, previewWidget);
-                }
-
+                addHighlightedPreview(node);
                 node._scorpiovHighlightAdded = true;
                 console.log("[Scorpiov Wildcard] Highlighted preview widget added:", node.id);
             }

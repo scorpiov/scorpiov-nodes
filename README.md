@@ -38,7 +38,8 @@ All-in-one wildcard processor with LoRA loading, serial/random modes, and prompt
 - A live **🎨 Highlighted Preview** box sits under the text field, color-coding `{ }` groups, `( )` weights, `:weight` numbers, and comments as you type — read-only, just a visual aid
 
 ### Wildcard Prompter 📝
-<img width="806" height="846" alt="workflow(2)" src="https://github.com/user-attachments/assets/8f7232b8-7637-40d5-8466-4124f2429a1d" />
+<img width="1347" height="827" alt="image" src="https://github.com/user-attachments/assets/d56cb04b-f154-4961-9fad-cf498366fd85" />
+
 
 Text-only variant of the Wildcard Processor — no `model`/`clip` inputs, no LoRA loading. Just resolves wildcards and outputs the string, so you can feed it into a Lora Tag Loader or CLIPTextEncode. Useful when you want to build your prompt text before deciding what to do with it. Same comment support and Highlighted Preview as the Wildcard Processor.
 

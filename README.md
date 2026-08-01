@@ -26,7 +26,7 @@ No extra Python dependencies beyond what ComfyUI already ships with.
 ---
 
 ### Wildcard Processor 🎲
-<img width="1339" height="946" alt="workflow(3)" src="https://github.com/user-attachments/assets/29fb3b3c-7a6e-4848-9f36-a4e3eea5a13a" />
+<img width="1050" height="728" alt="Screenshot 2026-07-31 214155" src="https://github.com/user-attachments/assets/0c4b9fa2-a349-40a1-811e-403151acd593" />
 
 All-in-one wildcard processor with LoRA loading, serial/random modes, and prompt preview.
 - Put your wildcard `.txt` files into the `wildcards/` folder in the node folder — any subfolder depth, just reference by filename with `__filename__` (no path needed)

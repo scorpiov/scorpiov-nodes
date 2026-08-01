@@ -34,12 +34,22 @@ All-in-one wildcard processor with LoRA loading, serial/random modes, and prompt
 - Random or Serial selection mode; Serial remembers position and loops
 - Parses and loads `<lora:name:weight>` tags found in the resolved text directly onto the model/clip
 - Outputs CONDITIONING, MODEL, CLIP, and the resolved STRING
-
+- **Comments** are supported both in wildcard `.txt` files and typed directly into the node's own text box — see [Comments](#comments) below
+- A live **🎨 Highlighted Preview** box sits under the text field, color-coding `{ }` groups, `( )` weights, `:weight` numbers, and comments as you type — read-only, just a visual aid
 
 ### Wildcard Prompter 📝
 <img width="806" height="846" alt="workflow(2)" src="https://github.com/user-attachments/assets/8f7232b8-7637-40d5-8466-4124f2429a1d" />
 
-Text-only variant of the Wildcard Processor — no `model`/`clip` inputs, no LoRA loading. Just resolves wildcards and outputs the string, so you can feed it into a Lora Tag Loader or CLIPTextEncode. Useful when you want to build your prompt text before deciding what to do with it.
+Text-only variant of the Wildcard Processor — no `model`/`clip` inputs, no LoRA loading. Just resolves wildcards and outputs the string, so you can feed it into a Lora Tag Loader or CLIPTextEncode. Useful when you want to build your prompt text before deciding what to do with it. Same comment support and Highlighted Preview as the Wildcard Processor.
+
+#### Comments
+
+Both wildcard nodes, and the `.txt` files they load from `wildcards/`, support two comment styles:
+
+- `# comment` — everything from a `#` to the end of that line is dropped. Works on its own line, or trailing after real text (`blonde hair # my favorite`).
+- `/* comment */` — block comments, C-style. Can span multiple lines, and the markers don't need to sit alone on their own line — `/* this` on one line and `is a comment */` two lines later works exactly like you'd expect from any C-style comment.
+
+Comments are stripped before wildcards or `{a|b|c}` groups are resolved, so they never reach the resolved prompt, Save Image, or embedded PNG metadata.
 
 ### Lora Tag Loader 🏷️
 <img width="1566" height="693" alt="image" src="https://github.com/user-attachments/assets/71fd2cdb-df20-4930-a273-af0fd12e3234" />
@@ -76,7 +86,9 @@ Loads an image and outputs the tensor, the bare filename, and the full file path
 Saves images with full A1111/Civitai-compatible metadata embedded in the PNG.
 
 - **Required wires:** `images`, `positive_prompt`, `negative_prompt`
+- **`loras`** is also a wire-only input (no typed-text fallback) — connect it from Lora Tag Loader's `loras_info` output, or Image Meta Reader's `loras` output. Leave it unconnected to skip LoRA metadata entirely.
 - **Everything else is auto-detected** from your workflow graph — steps, CFG, sampler, scheduler, seed, checkpoint name, and VAE name are all read automatically. Typing a value into any of those fields overrides the auto-detected one.
+- **⚙ Advanced Settings** collapses `model_name`, `vae_name`, `steps`, `cfg`, `sampler_name`, and `scheduler` behind a toggle button, collapsed by default, since these usually only matter when overriding auto-detection. `seed`, `control_after_generate`, `save_metadata`, and `model_hash` stay visible.
 - **LoRA + Civitai badges:** wire `Lora Tag Loader`'s `loras_info` output into the `loras` input, and Save Image will embed the `<lora:name:weight>` tag and a proper `Lora hashes:` line so Civitai can recognize and badge the LoRAs used.
 - **Model hash:** the checkpoint file is automatically hashed (SHA256 → Civitai's "AutoV2" short hash) and embedded as `Model hash:`, same as the `model_hash` field can be typed manually to override.
 - **Hashing is cached**, keyed by file content (not filename or path), so a given checkpoint or LoRA is only ever hashed once — after that, saves reuse the cached hash instantly. The cache lives at `scorpiov-nodes/.scorpiov_hash_cache.json`; delete it any time to force a clean re-hash of everything.
@@ -88,4 +100,4 @@ Saves images with full A1111/Civitai-compatible metadata embedded in the PNG.
 
 - All LoRA-aware nodes search every folder registered under ComfyUI's `loras` path — you don't need to configure anything, just drop LoRA files anywhere under your usual loras directory (subfolders included).
 - Metadata written by Save Image is readable by Automatic1111, Civitai, and this package's own Image Meta Reader.
-
+- Built and tested against ComfyUI's newer Vue-based frontend. If you're on the older classic frontend, the JS-side UI extras (Highlighted Preview, Advanced Settings toggle) should still work, but haven't been explicitly tested there.

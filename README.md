@@ -52,7 +52,7 @@ Both wildcard nodes, and the `.txt` files they load from `wildcards/`, support t
 Comments are stripped before wildcards or `{a|b|c}` groups are resolved, so they never reach the resolved prompt, Save Image, or embedded PNG metadata.
 
 ### Lora Tag Loader 🏷️
-<img width="1566" height="693" alt="image" src="https://github.com/user-attachments/assets/71fd2cdb-df20-4930-a273-af0fd12e3234" />
+<img width="1260" height="800" alt="Screenshot 2026-07-31 211411" src="https://github.com/user-attachments/assets/203cd9fb-9688-419d-9d63-e4c828ceef19" />
 
 Reads `<lora:name:weight>` or `<lora:name:weight:clip_weight>` tags out of a text prompt (e.g. from Wildcard Prompter), loads each named LoRA onto the given model/clip, and strips the tags out of the text so it's safe to feed into a standard `CLIPTextEncode` node.
 

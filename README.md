@@ -81,7 +81,7 @@ Reads PNG metadata in both A1111 and ComfyUI-native JSON formats — model, VAE,
 Loads an image and outputs the tensor, the bare filename, and the full file path — handy when a downstream node needs to know exactly which file it's working with.
 
 ### Save Image 💾
-<img width="581" height="798" alt="image" src="https://github.com/user-attachments/assets/e90ed7c2-a769-49c4-acd1-cf310495af6e" />
+<img width="581" height="798" alt="Screenshot 2026-07-31 211015" src="https://github.com/user-attachments/assets/83ec6dc6-711c-4b0d-b6c5-1fe399c08f52" />
 
 Saves images with full A1111/Civitai-compatible metadata embedded in the PNG.
 

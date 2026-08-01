@@ -317,9 +317,10 @@ class ScorpiovSaveImage:
             "optional": {
                 # ── All optional — auto-detected from workflow if left blank / 0 ──
                 "loras": ("STRING", {
-                    "multiline": True,
-                    "default":   "",
-                    "tooltip":   "Auto-filled if left blank. Or wire from Image Meta Reader → loras.",
+                    "multiline":  True,
+                    "forceInput": True,
+                    "default":    "",
+                    "tooltip":    "Wire from Lora Tag Loader \u2192 loras_info, or Image Meta Reader \u2192 loras. Leave unconnected to skip.",
                 }),
                 "model_name": ("STRING", {
                     "multiline": False,

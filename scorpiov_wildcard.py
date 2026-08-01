@@ -135,13 +135,76 @@ async def scorpiov_refresh_endpoint(request):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Comment stripping — shared by wildcard files AND the node's own text box
+#  so the rule only lives in one place (see dev reference §3.5 principle).
+#
+#    - line starting with '#'      -> whole line dropped
+#    - '#' appearing after content -> text before '#' kept, rest dropped
+#    - a line that is exactly '/*' -> starts a block comment
+#    - a line that is exactly '*/' -> ends a block comment
+#      (every line between the markers is dropped, however many there are)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _strip_comments_from_lines(lines):
+    """
+    Removes comments from a sequence of lines. Unlike the first version,
+    '/*' and '*/' do NOT need to sit alone on their own line -- they are
+    found anywhere in the text, the same way real C-style block comments
+    work. This also lets a block comment start and end on the same line.
+
+    Example, all of this is correctly treated as one comment even though
+    the markers share lines with real text:
+        /* this block
+        is all a comment */
+    """
+    out = []
+    in_block = False
+    for raw in lines:
+        line = raw.rstrip("\n")
+        kept = []
+        i = 0
+        while i < len(line):
+            if in_block:
+                end_idx = line.find("*/", i)
+                if end_idx == -1:
+                    i = len(line)          # rest of this line is still comment
+                else:
+                    in_block = False
+                    i = end_idx + 2        # resume normal scanning after */
+                continue
+
+            start_idx = line.find("/*", i)
+            hash_idx  = line.find("#", i)
+            candidates = [x for x in (start_idx, hash_idx) if x != -1]
+            if not candidates:
+                kept.append(line[i:])
+                i = len(line)
+                continue
+
+            cut = min(candidates)
+            kept.append(line[i:cut])
+
+            if cut == hash_idx and (start_idx == -1 or hash_idx < start_idx):
+                i = len(line)              # '#' comments run to end of line
+            else:
+                in_block = True
+                i = cut + 2                # skip past the '/*' we just found
+
+        cleaned = "".join(kept).strip()
+        if cleaned:
+            out.append(cleaned)
+
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Wildcard file loading — uses the pre-built index
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _load_wildcard(name):
     """
-    Look up __name__ in the index and return its non-blank, non-comment lines.
-    Case-insensitive. Returns [__name__] unchanged if not found.
+    Look up __name__ in the index and return its usable (non-comment,
+    non-blank) lines. Case-insensitive. Returns [__name__] unchanged if not found.
     """
     stem = name.lower()
     path = _wildcard_index.get(stem)
@@ -150,8 +213,7 @@ def _load_wildcard(name):
               f"Check wildcards/ folder or click Refresh.")
         return [f"__{name}__"]
     with open(path, "r", encoding="utf-8") as f:
-        lines = [l.strip() for l in f
-                 if l.strip() and not l.strip().startswith("#")]
+        lines = _strip_comments_from_lines(f)
     if not lines:
         print(f"[Scorpiov Wildcard] WARNING: wildcard file is empty: {path}")
         return [f"__{name}__"]
@@ -173,9 +235,12 @@ def _pick(options, mode, node_id, identifier, start_line):
 
 def process_text(text, mode, start_line, node_id, seed):
     """
+    0. Comments (# and /* */), typed directly in this text, are stripped first
     1. __filename__ -> looks up in pre-built index, picks a line
     2. {a|b|c}      -> picks one option (innermost groups first, supports nesting)
     """
+    text = "\n".join(_strip_comments_from_lines(text.split("\n")))
+
     if mode == "random":
         random.seed(seed)
 

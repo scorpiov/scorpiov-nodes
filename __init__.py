@@ -9,6 +9,7 @@ Nodes included:
   - Scorpiov Image Meta Reader   (scorpiov_image_meta.py)
   - Scorpiov Image Loader        (scorpiov_image_loader.py)
   - Scorpiov Save Image          (scorpiov_save_image.py)
+  - Scorpiov Anywhere            (scorpiov_anywhere.py)
 """
 
 from .scorpiov_wildcard import (
@@ -35,9 +36,13 @@ from .scorpiov_lora_tag_loader import (
     NODE_CLASS_MAPPINGS as LORATAG_CLASSES,
     NODE_DISPLAY_NAME_MAPPINGS as LORATAG_NAMES,
 )
+from .scorpiov_anywhere import (
+    NODE_CLASS_MAPPINGS as ANYWHERE_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as ANYWHERE_NAMES,
+)
 
-NODE_CLASS_MAPPINGS = {**WILDCARD_CLASSES, **WH_CLASSES, **META_CLASSES, **LOADER_CLASSES, **SAVE_CLASSES, **LORATAG_CLASSES}
-NODE_DISPLAY_NAME_MAPPINGS = {**WILDCARD_NAMES, **WH_NAMES, **META_NAMES, **LOADER_NAMES, **SAVE_NAMES, **LORATAG_NAMES}
+NODE_CLASS_MAPPINGS = {**WILDCARD_CLASSES, **WH_CLASSES, **META_CLASSES, **LOADER_CLASSES, **SAVE_CLASSES, **LORATAG_CLASSES, **ANYWHERE_CLASSES}
+NODE_DISPLAY_NAME_MAPPINGS = {**WILDCARD_NAMES, **WH_NAMES, **META_NAMES, **LOADER_NAMES, **SAVE_NAMES, **LORATAG_NAMES, **ANYWHERE_NAMES}
 
 WEB_DIRECTORY = "./js"
 

@@ -2,7 +2,7 @@
 <img width="3523" height="1477" alt="workflow(1)" src="https://github.com/user-attachments/assets/1a45cb30-7633-44a3-a65e-d0c8af0acdbd" />
 
 
-A collection of custom ComfyUI nodes I use in my own workflows — wildcard prompting, LoRA tag loading, and Civitai-ready image saving with automatic metadata.
+A collection of custom ComfyUI nodes I use in my own workflows — wildcard prompting, LoRA tag loading, Civitai-ready image saving with automatic metadata, and graph-wide broadcast connections.
 
 ## Installation
 
@@ -13,31 +13,35 @@ No extra Python dependencies beyond what ComfyUI already ships with.
 
 ## Nodes
 
-| Node | Category | What it does |
-|---|---|---|
-| Wildcard Processor 🎲 | Scorpiov/Prompt | Resolves wildcards + inline `{a\|b\|c}` groups, loads `<lora:...>` tags, outputs CONDITIONING |
-| Wildcard Prompter 📝 | Scorpiov/Prompt | Text-only version — no model/clip needed, just resolves wildcards to a string |
-| Lora Tag Loader 🏷️ | Scorpiov/Loaders | Reads `<lora:name:weight>` tags out of any text, loads them onto model/clip, strips the tags |
-| Width Height | Scorpiov/Latent | Aspect ratio picker for empty latents |
-| Image Meta Reader 🔍 | Scorpiov/Image | Reads A1111 and ComfyUI-native PNG metadata back out of an image |
-| Image Loader 🖼️ | Scorpiov/Image | Loads an image, also outputs its filename and full path |
-| Save Image 💾 | Scorpiov/Image | Saves images with full Civitai-compatible metadata, auto-detected from your workflow |
+| Node                    | Category         | What it does                                                                                 |
+| ----------------------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| Wildcard Processor 🎲    | Scorpiov/Prompt  | Resolves wildcards + inline `{a\|b\|c}` groups, loads `<lora:...>` tags, outputs CONDITIONING |
+| Wildcard Prompter 📝     | Scorpiov/Prompt  | Text-only version — no model/clip needed, just resolves wildcards to a string                |
+| Lora Tag Loader 🏷️      | Scorpiov/Loaders | Reads `<lora:name:weight>` tags out of any text, loads them onto model/clip, strips the tags |
+| Width Height            | Scorpiov/Latent  | Aspect ratio picker for empty latents                                                        |
+| Image Meta Reader 🔍     | Scorpiov/Image   | Reads A1111 and ComfyUI-native PNG metadata back out of an image                             |
+| Image Loader 🖼️         | Scorpiov/Image   | Loads an image, also outputs its filename and full path                                      |
+| Save Image 💾            | Scorpiov/Image   | Saves images with full Civitai-compatible metadata, auto-detected from your workflow         |
+| Scorpiov Anywhere 📡     | Scorpiov/Routing | Broadcasts a connection to every matching, unconnected input in the graph — no wires needed  |
 
 ---
 
 ### Wildcard Processor 🎲
+
 <img width="1050" height="728" alt="Screenshot 2026-07-31 214155" src="https://github.com/user-attachments/assets/0c4b9fa2-a349-40a1-811e-403151acd593" />
 
 All-in-one wildcard processor with LoRA loading, serial/random modes, and prompt preview.
+
 - Put your wildcard `.txt` files into the `wildcards/` folder in the node folder — any subfolder depth, just reference by filename with `__filename__` (no path needed)
 - Supports inline `{option_a|option_b|option_c}` groups, including nested
 - Random or Serial selection mode; Serial remembers position and loops
 - Parses and loads `<lora:name:weight>` tags found in the resolved text directly onto the model/clip
 - Outputs CONDITIONING, MODEL, CLIP, and the resolved STRING
 - **Comments** are supported both in wildcard `.txt` files and typed directly into the node's own text box — see [Comments](#comments) below
-- A live **🎨 Highlighted Preview** box sits under the text field, color-coding `{ }` groups, `( )` weights, `:weight` numbers, and comments as you type — read-only, just a visual aid
+- A live **🎨 Highlighted Preview** box sits under the text field, color-coding `{ }` groups, `( )` weights, `:weight` numbers, and comments as you type — read-only, just a visual aidc
 
 ### Wildcard Prompter 📝
+
 <img width="1347" height="827" alt="image" src="https://github.com/user-attachments/assets/d56cb04b-f154-4961-9fad-cf498366fd85" />
 
 
@@ -53,12 +57,13 @@ Both wildcard nodes, and the `.txt` files they load from `wildcards/`, support t
 Comments are stripped before wildcards or `{a|b|c}` groups are resolved, so they never reach the resolved prompt, Save Image, or embedded PNG metadata.
 
 ### Lora Tag Loader 🏷️
+
 <img width="1260" height="800" alt="Screenshot 2026-07-31 211411" src="https://github.com/user-attachments/assets/203cd9fb-9688-419d-9d63-e4c828ceef19" />
 
 Reads `<lora:name:weight>` or `<lora:name:weight:clip_weight>` tags out of a text prompt (e.g. from Wildcard Prompter), loads each named LoRA onto the given model/clip, and strips the tags out of the text so it's safe to feed into a standard `CLIPTextEncode` node.
 
 - `<lora:name:0.8>` → same weight applied to both the model and CLIP
-- `<lora:name:0.8:0.6>` → separate model weight (0.8) and CLIP weight (0.6), matching how [comfyui_lora_tag_loader](https://github.com/badjeff/comfyui_lora_tag_loader) handles it
+- `<lora:name:0.8:0.6>` → separate model weight (0.8) and CLIP weight (0.6), matching how [comfyui_lora_tag_loader](https://github.com/badjeff/comfyui_lora_tag_loader) handles it **(Shoutout and thanks to badjeff for an amazing node).**
 - Searches every folder registered under ComfyUI's `loras` path, matched by filename — subfolders in your LoRA library "just work," and a subfolder prefix inside the tag itself (e.g. `<lora:MyFolder\mylora:0.8>`) is handled too
 - Outputs: `model`, `clip`, `text` (tags stripped, ready for CLIPTextEncode), and `loras_info` — a formatted string with each LoRA's name, weight, and content hash, meant to be wired straight into **Save Image**'s `loras` input for Civitai-compatible metadata
 
@@ -77,6 +82,7 @@ Aspect Ratio Node, set width/height for empty latents or choose from a list
 Reads PNG metadata in both A1111 and ComfyUI-native JSON formats — model, VAE, LoRAs, prompts, and the full raw metadata — into a single scrollable textarea. Has a "Read Metadata Now" button so you can inspect an image without running the whole workflow.
 
 ### Image Loader 🖼️
+
 <img width="1808" height="786" alt="Screenshot 2026-07-19 132754" src="https://github.com/user-attachments/assets/f9f223ce-6997-4b8c-88c6-625b38b445a1" />
 
 Loads an image and outputs the tensor, the bare filename, and the full file path — handy when a downstream node needs to know exactly which file it's working with.
@@ -95,10 +101,29 @@ Saves images with full A1111/Civitai-compatible metadata embedded in the PNG.
 - **Hashing is cached**, keyed by file content (not filename or path), so a given checkpoint or LoRA is only ever hashed once — after that, saves reuse the cached hash instantly. The cache lives at `scorpiov-nodes/.scorpiov_hash_cache.json`; delete it any time to force a clean re-hash of everything.
 - `filename_prefix` supports subfolders via `/` and date tokens like `%date:yyyy-MM-dd%`
 
+### Scorpiov Anywhere 📡
+
+<img width="1641" height="606" alt="image" src="https://github.com/user-attachments/assets/6819ceba-bf2d-4731-bd98-ae2144a0c92f" />
+
+<img width="1336" height="611" alt="image" src="https://github.com/user-attachments/assets/d1f720c4-1abe-4a27-8cca-d63139eb7971" />
+
+
+A broadcast/connector node — plug something in once, and it becomes available to every other matching, unconnected input in the graph, without drawing a wire to each one by hand. Inspired by [cg-use-everywhere](https://github.com/chrisgoringe/cg-use-everywhere)'s "Anything Everywhere," rebuilt independently for reliability on newer Vue-based ComfyUI frontends. **Shoutout and thanks to chrisgoringe**
+
+- **Dynamic inputs** — connect one thing or ten; a fresh empty `anything_N` slot appears automatically as each one fills.
+- **Auto-labeling** — each connected slot is labeled from its source (`MODEL`, `CLIP`, `VAE`, ...) automatically, for readability.
+- **Any-node broadcasting** — right-click any node → "Add Scorpiov Broadcasting" to broadcast its outputs directly, without routing through a dedicated node.
+- **Type + name matching with priority** — an unconnected input is filled by the best-scoring match (exact name match beats type-only match). Genuine ties — e.g. two same-typed sources with nothing to disambiguate them (two `CONDITIONING` outputs, or several `STRING` fields) — are skipped and logged rather than guessed.
+- **Manual disambiguation** — right-click any input dot on a Scorpiov Anywhere node → "Rename for Scorpiov matching..." to give it a specific name (e.g. `positive` / `negative`) so it matches the right target when more than one source shares a type. This persists with the saved workflow.
+- **Cycle-safe** — before accepting a match, the engine checks whether it would create a dependency loop through the graph's existing connections, and skips it (with a log message) rather than producing an unrunnable prompt.
+- **Selection-based wire visualizer** — select a Scorpiov Anywhere (or broadcast-flagged) node to see faint dashed lines to everything it feeds; select any fed node to see a line back to its broadcaster. Nothing is drawn unless something is selected.
+- Resolves entirely at prompt-submission time by rewriting the serialized graph before it's sent for execution — the node itself never reaches the backend, so there's no runtime cost, but it also means broadcast connections never appear as real wires on the canvas. Use the visualizer, or check the browser console for skipped-match warnings, to confirm what actually got connected.
+
 ---
 
 ## Notes
 
 - All LoRA-aware nodes search every folder registered under ComfyUI's `loras` path — you don't need to configure anything, just drop LoRA files anywhere under your usual loras directory (subfolders included).
 - Metadata written by Save Image is readable by Automatic1111, Civitai, and this package's own Image Meta Reader.
-- Built and tested against ComfyUI's newer Vue-based frontend. If you're on the older classic frontend, the JS-side UI extras (Highlighted Preview, Advanced Settings toggle) should still work, but haven't been explicitly tested there.
+- Built and tested against ComfyUI's newer Vue-based frontend. If you're on the older classic frontend, the JS-side UI extras (Highlighted Preview, Advanced Settings toggle, Scorpiov Anywhere's visualizer and rename menu) should still work, but haven't been explicitly tested there.
+- Scorpiov Anywhere's Image Meta Reader compatibility: since broadcast connections aren't real graph wires, Image Meta Reader's graph-walking (which follows real links) currently won't see prompts/LoRAs delivered via a broadcast — wire those directly if you need them to show up in embedded metadata.

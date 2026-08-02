@@ -383,7 +383,7 @@ function drawScorpiovSelectionWires(ctx) {
   const winners = getWinnersForVisualization(graph);
 
   for (const idStr of selectedIds) {
-    const selNode = graph.getNodeById(Number(idStr));
+    const selNode = graph.getNodeById(idStr);
     if (!selNode) continue;
 
     // (a) selected node is a broadcaster -> wires out to every endpoint it feeds
@@ -391,7 +391,7 @@ function drawScorpiovSelectionWires(ctx) {
       for (const [key, source] of winners.entries()) {
         if (source.broadcasterNodeId !== selNode.id) continue;
         const [targetIdStr, inputName] = key.split("::");
-        const targetNode = graph.getNodeById(Number(targetIdStr));
+        const targetNode = graph.getNodeById(targetIdStr);
         if (!targetNode) continue;
         drawFaintWire(
           ctx,
@@ -403,9 +403,14 @@ function drawScorpiovSelectionWires(ctx) {
     }
 
     // (b) selected node is an endpoint -> wire back to whichever broadcaster feeds it
+    // NOTE: this comparison MUST be string-to-string. Node ids in this
+    // ComfyUI version are strings ("22", not 22) -- comparing
+    // Number(targetIdStr) !== selNode.id (a number against a string) is
+    // ALWAYS true under strict inequality, which silently skipped every
+    // single candidate here from the very first version of this file.
     for (const [key, source] of winners.entries()) {
       const [targetIdStr, inputName] = key.split("::");
-      if (Number(targetIdStr) !== selNode.id) continue;
+      if (targetIdStr !== String(selNode.id)) continue;
       const broadcasterNode = graph.getNodeById(source.broadcasterNodeId);
       if (!broadcasterNode) continue;
       drawFaintWire(

@@ -2,7 +2,7 @@
 <img width="3523" height="1477" alt="workflow(1)" src="https://github.com/user-attachments/assets/1a45cb30-7633-44a3-a65e-d0c8af0acdbd" />
 
 
-A collection of custom ComfyUI nodes I use in my own workflows — wildcard prompting, LoRA tag loading, Civitai-ready image saving with automatic metadata, and graph-wide broadcast connections.
+A collection of custom ComfyUI nodes I use in my own workflows — wildcard prompting, LoRA tag loading, Civitai-ready image saving with automatic metadata, graph-wide broadcast connections, and weighted prompt/conditioning merging.
 
 ## Installation
 
@@ -23,6 +23,7 @@ No extra Python dependencies beyond what ComfyUI already ships with.
 | Image Loader 🖼️         | Scorpiov/Image   | Loads an image, also outputs its filename and full path                                      |
 | Save Image 💾            | Scorpiov/Image   | Saves images with full Civitai-compatible metadata, auto-detected from your workflow         |
 | Scorpiov Anywhere 📡     | Scorpiov/Routing | Broadcasts a connection to every matching, unconnected input in the graph — no wires needed  |
+| Prompt Combiner/Router 🔀 | Scorpiov/Routing | Merges multiple STRING and/or CONDITIONING inputs into one output each, with per-input weight and enable/disable |
 
 ---
 
@@ -118,6 +119,23 @@ A broadcast/connector node — plug something in once, and it becomes available 
 - **Cycle-safe** — before accepting a match, the engine checks whether it would create a dependency loop through the graph's existing connections, and skips it (with a log message) rather than producing an unrunnable prompt.
 - **Selection-based wire visualizer** — select a Scorpiov Anywhere (or broadcast-flagged) node to see faint dashed lines to everything it feeds; select any fed node to see a line back to its broadcaster. Nothing is drawn unless something is selected.
 - Resolves entirely at prompt-submission time by rewriting the serialized graph before it's sent for execution — the node itself never reaches the backend, so there's no runtime cost, but it also means broadcast connections never appear as real wires on the canvas. Use the visualizer, or check the browser console for skipped-match warnings, to confirm what actually got connected.
+
+---
+
+### Prompt Combiner/Router 🔀
+
+Merges multiple STRING and/or CONDITIONING inputs into one merged STRING output and one merged CONDITIONING output, with per-input weight and enabled/disabled control. Sits naturally between `Wildcard Prompter` and `Lora Tag Loader` when plain concatenation isn't giving you enough control over how prompt fragments combine.
+
+- **Dynamic inputs** — same `anything_N` growth pattern as Scorpiov Anywhere; wire in as many STRING and/or CONDITIONING sources as you want, in any mix.
+- **Auto-routing by type** — no need to tell it what's connected. STRING inputs feed `merged_string`, CONDITIONING inputs feed `merged_conditioning`, automatically, per connection.
+- **Per-input weight and enable/disable** — right-click any connected slot → "Set weight..." or "Enable/Disable this input". Settings persist with the saved workflow.
+  - For **STRING** inputs, weight is expressed using ComfyUI's own prompt-emphasis syntax (`(fragment:0.60)`), so it directly affects generation strength through a standard `CLIPTextEncode` — text itself has no numeric "blend," so this is how weight actually does something for the STRING path.
+  - For **CONDITIONING** inputs, weight drives a genuine weighted average across every connected input's tensor *and* pooled_output (matching how ComfyUI's own `ConditioningAverage` node treats its strength parameter, generalized here to N inputs instead of 2).
+- `separator` controls how merged STRING fragments are joined (default `, `).
+
+> **A note on `merged_conditioning`:** averaging conditioning tensors works well for gently nudging between *similar* prompts, but has a real ceiling for very different scenes — at equal weight, one prompt's content can dominate almost entirely, with barely a trace of the other. This is confirmed against ComfyUI's own built-in `ConditioningAverage` node behaving identically, not a limitation specific to this node. For blending two very different scenes, merging as STRING and running the combined text through a single `CLIPTextEncode` is usually the more reliable route to an actual blend.
+
+Typical chain: `Wildcard Prompter` → **Combiner/Router** → `Lora Tag Loader` → `CLIPTextEncode`.
 
 ---
 

@@ -10,6 +10,7 @@ Nodes included:
   - Scorpiov Image Loader        (scorpiov_image_loader.py)
   - Scorpiov Save Image          (scorpiov_save_image.py)
   - Scorpiov Anywhere            (scorpiov_anywhere.py)
+  - Scorpiov Prompt Combiner/Router (scorpiov_prompt_combiner.py)
 """
 
 from .scorpiov_wildcard import (
@@ -40,9 +41,13 @@ from .scorpiov_anywhere import (
     NODE_CLASS_MAPPINGS as ANYWHERE_CLASSES,
     NODE_DISPLAY_NAME_MAPPINGS as ANYWHERE_NAMES,
 )
+from .scorpiov_prompt_combiner import (
+    NODE_CLASS_MAPPINGS as COMBINER_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as COMBINER_NAMES,
+)
 
-NODE_CLASS_MAPPINGS = {**WILDCARD_CLASSES, **WH_CLASSES, **META_CLASSES, **LOADER_CLASSES, **SAVE_CLASSES, **LORATAG_CLASSES, **ANYWHERE_CLASSES}
-NODE_DISPLAY_NAME_MAPPINGS = {**WILDCARD_NAMES, **WH_NAMES, **META_NAMES, **LOADER_NAMES, **SAVE_NAMES, **LORATAG_NAMES, **ANYWHERE_NAMES}
+NODE_CLASS_MAPPINGS = {**WILDCARD_CLASSES, **WH_CLASSES, **META_CLASSES, **LOADER_CLASSES, **SAVE_CLASSES, **LORATAG_CLASSES, **ANYWHERE_CLASSES, **COMBINER_CLASSES}
+NODE_DISPLAY_NAME_MAPPINGS = {**WILDCARD_NAMES, **WH_NAMES, **META_NAMES, **LOADER_NAMES, **SAVE_NAMES, **LORATAG_NAMES, **ANYWHERE_NAMES, **COMBINER_NAMES}
 
 WEB_DIRECTORY = "./js"
 

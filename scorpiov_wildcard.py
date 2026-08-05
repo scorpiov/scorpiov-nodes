@@ -135,6 +135,31 @@ async def scorpiov_refresh_endpoint(request):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  REST endpoint — used by the Batch Prompt Runner to find out how many
+#  usable lines a wildcard file has, so it knows how many queue jobs to
+#  submit per checkpoint. Reuses the same index + loader as everything
+#  else, so "how many lines" always matches what serial mode will
+#  actually walk through (comments/blank lines excluded identically).
+#  GET /scorpiov/wildcard/line_count?name=<wildcard name>
+# ─────────────────────────────────────────────────────────────────────────────
+
+@PromptServer.instance.routes.get("/scorpiov/wildcard/line_count")
+async def scorpiov_line_count_endpoint(request):
+    name = request.query.get("name", "")
+    if not name:
+        return web.json_response({"status": "error", "message": "missing 'name' query param"}, status=400)
+    stem = name.lower()
+    found = stem in _wildcard_index
+    line_count = len(_load_wildcard(name)) if found else 0
+    return web.json_response({
+        "status": "ok",
+        "name": name,
+        "found": found,
+        "line_count": line_count,
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Comment stripping — shared by wildcard files AND the node's own text box
 #  so the rule only lives in one place (see dev reference §3.5 principle).
 #

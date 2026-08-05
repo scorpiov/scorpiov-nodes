@@ -11,6 +11,8 @@ Nodes included:
   - Scorpiov Save Image          (scorpiov_save_image.py)
   - Scorpiov Anywhere            (scorpiov_anywhere.py)
   - Scorpiov Prompt Combiner/Router (scorpiov_prompt_combiner.py)
+  - Scorpiov Multi-Checkpoint Loader (scorpiov_multi_checkpoint_loader.py)
+  - Scorpiov Batch Prompt Runner (scorpiov_batch_runner.py)
 """
 
 from .scorpiov_wildcard import (
@@ -45,9 +47,17 @@ from .scorpiov_prompt_combiner import (
     NODE_CLASS_MAPPINGS as COMBINER_CLASSES,
     NODE_DISPLAY_NAME_MAPPINGS as COMBINER_NAMES,
 )
+from .scorpiov_multi_checkpoint_loader import (
+    NODE_CLASS_MAPPINGS as MCL_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as MCL_NAMES,
+)
+from .scorpiov_batch_runner import (
+    NODE_CLASS_MAPPINGS as BATCH_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as BATCH_NAMES,
+)
 
-NODE_CLASS_MAPPINGS = {**WILDCARD_CLASSES, **WH_CLASSES, **META_CLASSES, **LOADER_CLASSES, **SAVE_CLASSES, **LORATAG_CLASSES, **ANYWHERE_CLASSES, **COMBINER_CLASSES}
-NODE_DISPLAY_NAME_MAPPINGS = {**WILDCARD_NAMES, **WH_NAMES, **META_NAMES, **LOADER_NAMES, **SAVE_NAMES, **LORATAG_NAMES, **ANYWHERE_NAMES, **COMBINER_NAMES}
+NODE_CLASS_MAPPINGS = {**WILDCARD_CLASSES, **WH_CLASSES, **META_CLASSES, **LOADER_CLASSES, **SAVE_CLASSES, **LORATAG_CLASSES, **ANYWHERE_CLASSES, **COMBINER_CLASSES, **MCL_CLASSES, **BATCH_CLASSES}
+NODE_DISPLAY_NAME_MAPPINGS = {**WILDCARD_NAMES, **WH_NAMES, **META_NAMES, **LOADER_NAMES, **SAVE_NAMES, **LORATAG_NAMES, **ANYWHERE_NAMES, **COMBINER_NAMES, **MCL_NAMES, **BATCH_NAMES}
 
 WEB_DIRECTORY = "./js"
 

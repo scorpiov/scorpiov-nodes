@@ -260,9 +260,24 @@ def _pick(options, mode, node_id, identifier, start_line):
 
 def process_text(text, mode, start_line, node_id, seed):
     """
-    0. Comments (# and /* */), typed directly in this text, are stripped first
-    1. __filename__ -> looks up in pre-built index, picks a line
-    2. {a|b|c}      -> picks one option (innermost groups first, supports nesting)
+    Resolves wildcards in this order, interleaved until stable:
+
+      1. Strip comments (# and /* */) from the typed text first.
+      2. Alternate between two sub-steps until no more changes occur:
+           a. Resolve the innermost {a|b|c} group — pick ONE option.
+           b. Expand any __file__ wildcard tokens that are now exposed.
+
+    Interleaving is the key fix: previously, ALL __file__ tokens were
+    expanded before ANY {} group was resolved. That meant
+    {__anima01__|__anima02__|...} expanded every file upfront, then split
+    on | — but the expanded file content often contains | characters itself
+    (from nested {a|b} groups or LoRA weights), causing the outer group
+    split to break across the wrong boundaries and bleed content from
+    multiple wildcard files into one prompt.
+
+    With interleaving, the {} group picks its winning option FIRST, then
+    only that winner's __file__ reference is expanded — so content from
+    the unchosen options never enters the prompt.
     """
     text = "\n".join(_strip_comments_from_lines(text.split("\n")))
 
@@ -271,30 +286,38 @@ def process_text(text, mode, start_line, node_id, seed):
 
     inline_counter = [0]
 
-    # Step 1: __file__ wildcards
     def replace_file_wildcard(m):
         name  = m.group(1)
         lines = _load_wildcard(name)
         return _pick(lines, mode, node_id, f"file::{name.lower()}", start_line)
 
-    for _ in range(10):
-        new_text = re.sub(r'__([a-zA-Z0-9_\-]+)__', replace_file_wildcard, text)
-        if new_text == text:
-            break
-        text = new_text
-
-    # Step 2: {a|b|c} inline groups
     def replace_inline_group(m):
         options = [o.strip() for o in m.group(1).split("|")]
         inline_counter[0] += 1
         return _pick(options, mode, node_id,
                      f"inline::{inline_counter[0]}", start_line)
 
+    # Interleave {} resolution and __file__ expansion until stable.
+    # Each outer loop pass does ONE of each sub-step.
+    # We cap at 20 outer passes (400 total ops) to prevent infinite loops
+    # from pathological self-referencing wildcard files.
     for _ in range(20):
+        changed = False
+
+        # a. Resolve one layer of innermost {} groups
         new_text = re.sub(r'\{([^{}]*)\}', replace_inline_group, text)
-        if new_text == text:
+        if new_text != text:
+            text    = new_text
+            changed = True
+
+        # b. Expand any __file__ tokens now visible (one pass)
+        new_text = re.sub(r'__([a-zA-Z0-9_\-]+)__', replace_file_wildcard, text)
+        if new_text != text:
+            text    = new_text
+            changed = True
+
+        if not changed:
             break
-        text = new_text
 
     return text
 

@@ -2,21 +2,11 @@
  * Scorpiov Wildcard Node — ComfyUI UI Extension
  *
  * Adds to the node:
- *   1. A "🎨 Highlighted Preview" read-only box directly below the real
- *      "text" input, that live-mirrors what you type with syntax coloring:
- *        - # comments and block comments between /* and *\/ markers
- *        - { } groups by nesting depth
- *        - ( ) weight parens by nesting depth (separate from { })
- *        - the ":1.5" style weight number
- *      The real "text" box itself is left completely untouched -- ComfyUI's
- *      own multiline STRING widget is already a DOM-based "customtext"
- *      widget internally, so trying to replace it fights the framework's
- *      own widget instead of adding alongside it. This preview is purely
- *      additive, the same proven pattern as the Resolved Prompt box below.
- *   2. A "🔄 Refresh Wildcards" button — resets serial state & rescans folder.
+ *   1. A "🔄 Refresh Wildcards" button — resets serial state & rescans folder.
  *      Does NOT trigger generation. Calls POST /scorpiov/wildcard/refresh directly.
- *   3. A read-only multiline text box showing the fully resolved prompt
- *      (all wildcards + comments removed) after each generation run.
+ *
+ *   2. A read-only multiline text box showing the fully resolved prompt
+ *      (all wildcards replaced) after each generation run.
  */
 
 import { app } from "../../scripts/app.js";
@@ -30,210 +20,7 @@ function getWildcardFolder(node) {
     return getWidget(node, "wildcard_folder")?.value ?? "";
 }
 
-// ── Shared visual constants ───────────────────────────────────────────────
-const BRACE_COLORS  = ["#e5c07b", "#c586c0", "#56b6c2", "#98c379"]; // { } nesting depth
-const PAREN_COLORS  = ["#61afef", "#d19a66", "#e06c75", "#c678dd"]; // ( ) nesting depth
-const WEIGHT_COLOR  = "#e5e510"; // the ":1.5" weight number
-const COMMENT_COLOR = "#6a9955";
-const WARN_COLOR    = "#f14c4c"; // stray closing bracket/paren with nothing open to match
-
-function escapeHtml(s) {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function highlight(raw, warningLabel) {
-    let inBlock = false;
-    let braceDepth = 0;
-    let parenDepth = 0;
-    let braceOrphanCloses = 0; // a "}" seen with nothing open to match it
-    let parenOrphanCloses = 0; // a ")" seen with nothing open to match it
-
-    function commentSpan(text) {
-        return `<span style="color:${COMMENT_COLOR} !important;font-style:italic">${escapeHtml(text)}</span>`;
-    }
-
-    // Colors the "live" (non-comment) portion of a line: { } ( ) and
-    // :weight numbers. Reads/writes the outer braceDepth/parenDepth/orphan
-    // counters so nesting depth and orphan-close detection carry correctly
-    // across the whole text, not just within one line.
-    function colorLive(text) {
-        let out = "";
-        let i = 0;
-        while (i < text.length) {
-            const ch = text[i];
-
-            if (ch === "{") {
-                out += `<span style="color:${BRACE_COLORS[braceDepth % BRACE_COLORS.length]} !important">{</span>`;
-                braceDepth++;
-                i++;
-            } else if (ch === "}") {
-                if (braceDepth === 0) {
-                    braceOrphanCloses++;
-                    out += `<span style="color:${WARN_COLOR} !important;font-weight:bold">}</span>`;
-                } else {
-                    braceDepth--;
-                    out += `<span style="color:${BRACE_COLORS[braceDepth % BRACE_COLORS.length]} !important">}</span>`;
-                }
-                i++;
-            } else if (ch === "(") {
-                out += `<span style="color:${PAREN_COLORS[parenDepth % PAREN_COLORS.length]} !important">(</span>`;
-                parenDepth++;
-                i++;
-            } else if (ch === ")") {
-                if (parenDepth === 0) {
-                    parenOrphanCloses++;
-                    out += `<span style="color:${WARN_COLOR} !important;font-weight:bold">)</span>`;
-                } else {
-                    parenDepth--;
-                    out += `<span style="color:${PAREN_COLORS[parenDepth % PAREN_COLORS.length]} !important">)</span>`;
-                }
-                i++;
-            } else if (ch === ":" && /^-?\d*\.?\d+/.test(text.slice(i + 1))) {
-                const match = text.slice(i + 1).match(/^-?\d*\.?\d+/)[0];
-                out += `<span style="color:${WEIGHT_COLOR} !important">:${escapeHtml(match)}</span>`;
-                i += 1 + match.length;
-            } else {
-                out += escapeHtml(ch);
-                i++;
-            }
-        }
-        return out;
-    }
-
-    // Scans one line as a sequence of segments, switching between "live"
-    // and "comment" coloring wherever # or /* or */ actually appear --
-    // not just when they sit alone on their own line. Mirrors
-    // _strip_comments_from_lines() in scorpiov_wildcard.py.
-    function highlightLine(line) {
-        let out = "";
-        let i = 0;
-
-        while (i < line.length) {
-            if (inBlock) {
-                const endIdx = line.indexOf("*/", i);
-                if (endIdx === -1) {
-                    out += commentSpan(line.slice(i));
-                    i = line.length;
-                } else {
-                    out += commentSpan(line.slice(i, endIdx + 2));
-                    i = endIdx + 2;
-                    inBlock = false;
-                }
-                continue;
-            }
-
-            const hashIdx  = line.indexOf("#", i);
-            const blockIdx = line.indexOf("/*", i);
-            const hasHash  = hashIdx !== -1;
-            const hasBlock = blockIdx !== -1;
-            const hashFirst = hasHash && (!hasBlock || hashIdx <= blockIdx);
-
-            if (!hasHash && !hasBlock) {
-                out += colorLive(line.slice(i));
-                i = line.length;
-            } else if (hashFirst) {
-                out += colorLive(line.slice(i, hashIdx));
-                out += commentSpan(line.slice(hashIdx)); // # runs to end of line
-                i = line.length;
-            } else {
-                out += colorLive(line.slice(i, blockIdx));
-                inBlock = true;
-                i = blockIdx; // handled by the inBlock branch on next loop pass
-            }
-        }
-
-        return out;
-    }
-
-    const htmlLines = raw.split("\n").map(highlightLine);
-
-    if (warningLabel) {
-        const warnings = [];
-        if (braceDepth > 0) warnings.push(`${braceDepth} unclosed {`);
-        if (parenDepth > 0) warnings.push(`${parenDepth} unclosed (`);
-        if (braceOrphanCloses > 0) warnings.push(`${braceOrphanCloses} stray } with no matching {`);
-        if (parenOrphanCloses > 0) warnings.push(`${parenOrphanCloses} stray ) with no matching (`);
-        warningLabel.textContent = warnings.length ? `⚠ ${warnings.join(", ")}` : "";
-    }
-
-    return htmlLines.join("\n");
-}
-
-// ── Live highlighted preview (read-only, mirrors the real "text" widget) ───
-function addHighlightedPreview(node) {
-    const container = document.createElement("div");
-    container.style.cssText = "width: 100%; padding: 4px 0px; box-sizing: border-box;";
-
-    const label = document.createElement("div");
-    label.textContent = "🎨 Highlighted Preview (live, read-only)";
-    label.style.cssText = [
-        "font-size: 11px", "color: #999", "margin-bottom: 3px",
-        "font-family: sans-serif", "user-select: none",
-    ].join(";");
-
-    const warningLabel = document.createElement("div");
-    warningLabel.style.cssText = [
-        "font-size: 10px", "color: #e06c75", "font-family: sans-serif",
-        "min-height: 14px", "margin-bottom: 2px",
-    ].join(";");
-
-    const colorBox = document.createElement("div");
-    colorBox.style.cssText = [
-        "width: 100%", "box-sizing: border-box", "background: #1a1a2e",
-        "border: 1px solid #444", "border-radius: 4px", "padding: 6px 8px",
-        "font-size: 12px", "font-family: monospace", "line-height: 1.5",
-        "white-space: pre-wrap", "word-wrap: break-word",
-        "min-height: 100px", "max-height: 400px", "overflow: auto",
-        "resize: vertical", "color: #ddd",
-    ].join(";");
-
-    container.appendChild(label);
-    container.appendChild(warningLabel);
-    container.appendChild(colorBox);
-
-    function render() {
-        const textWidget = getWidget(node, "text");
-        const raw = textWidget?.value ?? "";
-        colorBox.innerHTML = highlight(raw, warningLabel) + "\n";
-    }
-
-    render();
-
-    const widget = node.addDOMWidget("scorpiov_highlight_preview", "customtext", container, {
-        getValue() { return ""; },
-        setValue() {},
-        serialize: false,
-    });
-    widget.serialize = false;
-
-    // Poll the real "text" widget for changes rather than relying on
-    // framework-internal change events, which may not fire the same way
-    // (or at all, on every keystroke) across ComfyUI frontend versions.
-    // Cheap enough at this interval to not matter performance-wise.
-    let lastSeen = null;
-    const intervalId = setInterval(() => {
-        const textWidget = getWidget(node, "text");
-        const current = textWidget?.value ?? "";
-        if (current !== lastSeen) {
-            lastSeen = current;
-            render();
-        }
-    }, 250);
-
-    node._scorpiovHighlightInterval = intervalId;
-
-    // Clean up the interval if the node is deleted, so it doesn't keep
-    // polling (and referencing a stale node) forever.
-    const onRemoved = node.onRemoved;
-    node.onRemoved = function () {
-        clearInterval(intervalId);
-        return onRemoved?.apply(this, arguments);
-    };
-
-    return widget;
-}
-
-// ── Read-only resolved-prompt preview ───────────────────────────────────────
+// ── Build a styled read-only textarea and attach it as a DOM widget ──────────
 function addPreviewTextarea(node) {
     const container = document.createElement("div");
     container.style.cssText = [
@@ -314,27 +101,6 @@ app.registerExtension({
         nodeType.prototype.onNodeCreated = function () {
             const result = onNodeCreated?.apply(this, arguments);
             const node = this;
-
-            // Guard: onNodeCreated can fire more than once on the same node.
-            // Without this, a second highlighted-preview widget gets added
-            // each time it fires, duplicating it and shifting other widgets.
-            //
-            // IMPORTANT: this widget is intentionally left wherever
-            // addDOMWidget naturally appends it (after mode/seed/etc, before
-            // the Refresh button and Resolved Prompt) rather than spliced up
-            // next to "text". Splicing a widget into the MIDDLE of
-            // node.widgets shifts every widget after it by one array slot,
-            // which corrupts widgets_values on any already-saved workflow —
-            // the exact same bug documented in the dev reference §3.7/§5.5
-            // for backend INPUT_TYPES fields. That rule applies here too:
-            // any new widget, front-end or back-end, only ever gets APPENDED,
-            // never inserted mid-array, no matter how much nicer a different
-            // position would look.
-            if (!node._scorpiovHighlightAdded) {
-                addHighlightedPreview(node);
-                node._scorpiovHighlightAdded = true;
-                console.log("[Scorpiov Wildcard] Highlighted preview widget added:", node.id);
-            }
 
             // ── REFRESH BUTTON ───────────────────────────────────────────
             // Pure UI action — calls our REST endpoint, never queues a prompt.

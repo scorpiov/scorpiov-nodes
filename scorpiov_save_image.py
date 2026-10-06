@@ -33,7 +33,6 @@ import numpy as np
 import folder_paths
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
-from .scorpiov_hash_utils import get_autov2_hash
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -51,6 +50,38 @@ _CHECKPOINT_TYPES   = {"CheckpointLoaderSimple", "CheckpointLoader",
 _VAE_TYPES          = {"VAELoader"}
 
 
+def _resolve_numeric(value, prompt, depth=0):
+    """
+    A KSampler field (steps/cfg/seed) can be a literal value, or a
+    [node_id, output_index] link to a small "primitive" node (an Int,
+    Float, or Seed-generator type node) supplying that value instead of
+    it being typed directly into the widget. Rather than hardcoding every
+    third-party node's class name and field name, follow the link one hop
+    and return the first value on that node that actually parses as a
+    number -- mirrors the link-following scorpiov_image_meta.py already
+    does for text, generalized here for numbers. Returns None if nothing
+    resolvable is found (caller falls back to its own default).
+    """
+    if depth > 3 or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        try:
+            return float(value) if "." in value else int(value)
+        except ValueError:
+            return None
+    if isinstance(value, list) and len(value) == 2:
+        node = prompt.get(str(value[0]))
+        if not isinstance(node, dict):
+            return None
+        for v in node.get("inputs", {}).values():
+            resolved = _resolve_numeric(v, prompt, depth + 1)
+            if resolved is not None:
+                return resolved
+    return None
+
+
 def _read_workflow(prompt: dict) -> dict:
     """
     Walk the workflow graph and extract:
@@ -65,7 +96,6 @@ def _read_workflow(prompt: dict) -> dict:
         "scheduler":    "",
         "seed":         -1,
         "model_name":   "",
-        "model_name_raw": "",   # raw ckpt_name as stored in the workflow, needed to locate the file for hashing
         "vae_name":     "",
     }
 
@@ -80,10 +110,23 @@ def _read_workflow(prompt: dict) -> dict:
 
         # ── KSampler → steps, cfg, sampler, scheduler, seed ──────────────
         if ct in _KSAMPLER_TYPES and not result["steps"]:
-            result["steps"]        = int(inputs.get("steps", 0))
-            result["cfg"]          = float(inputs.get("cfg", 0.0))
-            result["seed"]         = int(inputs.get("seed",
-                                         inputs.get("noise_seed", -1)))
+            # Any of these may be a literal value OR a [node_id, output_index]
+            # link if the widget was converted to an input (e.g. fed from a
+            # separate Int/Float/Seed node) rather than typed directly.
+            # _resolve_numeric follows that link rather than crashing on it.
+            steps_val = _resolve_numeric(inputs.get("steps", 0), prompt)
+            if steps_val is not None:
+                result["steps"] = int(steps_val)
+
+            cfg_val = _resolve_numeric(inputs.get("cfg", 0.0), prompt)
+            if cfg_val is not None:
+                result["cfg"] = float(cfg_val)
+
+            seed_val = _resolve_numeric(
+                inputs.get("seed", inputs.get("noise_seed", -1)), prompt
+            )
+            if seed_val is not None:
+                result["seed"] = int(seed_val)
             # sampler_name may be a string or a link — use string only
             sn = inputs.get("sampler_name", "")
             if isinstance(sn, str):
@@ -100,7 +143,6 @@ def _read_workflow(prompt: dict) -> dict:
                 result["model_name"] = os.path.splitext(
                     os.path.basename(ckpt)
                 )[0]
-                result["model_name_raw"] = ckpt
 
         # ── VAELoader → vae_name ──────────────────────────────────────────
         if ct in _VAE_TYPES and not result["vae_name"]:
@@ -117,7 +159,7 @@ def _read_workflow(prompt: dict) -> dict:
 #  A1111 "parameters" block builder
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_parameters(positive, negative, model, model_hash, vae, loras,
+def _build_parameters(positive, negative, model, vae, loras,
                        steps, cfg, sampler, scheduler, seed, width, height) -> str:
     """
     Build the exact A1111 parameters string that Civitai, A1111, and our
@@ -152,25 +194,19 @@ def _build_parameters(positive, negative, model, model_hash, vae, loras,
     if width and height:
         params.append(f"Size: {width}x{height}")
 
-    if model_hash and model_hash.strip():
-        params.append(f"Model hash: {model_hash.strip()}")
-
     if model and model.strip():
         params.append(f"Model: {model.strip()}")
 
     if vae and vae.strip():
         params.append(f"VAE: {vae.strip()}")
 
-    # LoRAs — parse "name (weight: 0.75) [hash: abc1234567]" lines
+    # LoRAs — parse "name (weight: 0.75)" lines and emit as tags
     lora_entries = _parse_loras(loras)
     if lora_entries:
         # Embed <lora:name:weight> in the positive prompt line (Civitai reads these)
         # and also add a Lora hashes line on the params line
         lora_tags     = ", ".join(f"<lora:{e['name']}:{e['weight']}>" for e in lora_entries)
-        lora_hash_str = ", ".join(
-            f"{e['name']}: {e['hash'] if e['hash'] else '0000000000'}"
-            for e in lora_entries
-        )
+        lora_hash_str = ", ".join(f"{e['name']}: 0000000000" for e in lora_entries)
         # Inject tags into positive line (line 0) if not already there
         if lora_tags and "<lora:" not in lines[0]:
             lines[0] = (lines[0].rstrip(", ") + ", " + lora_tags).lstrip(", ")
@@ -185,14 +221,7 @@ def _build_parameters(positive, negative, model, model_hash, vae, loras,
 
 
 def _parse_loras(loras_str: str) -> list:
-    """
-    Parse lines from the "loras" field into a list of dicts.
-    Supported line formats (all optional pieces except name):
-      "name (weight: 0.75) [hash: abc1234567]"   <- from Lora Tag Loader
-      "name (weight: 0.75)"                      <- no hash available
-      "name: weight"                              <- legacy manual format
-      "name"                                       <- weight defaults to 1
-    """
+    """Parse 'name (weight: 0.75)' lines into list of dicts."""
     result = []
     if not loras_str or not loras_str.strip() or loras_str.strip() == "(none)":
         return result
@@ -200,22 +229,15 @@ def _parse_loras(loras_str: str) -> list:
         line = line.strip()
         if not line:
             continue
-        m = re.match(
-            r'^(.+?)\s*\(weight:\s*([0-9.]+)\)(?:\s*\[hash:\s*([0-9a-fA-F]*)\])?',
-            line,
-        )
+        m = re.match(r'^(.+?)\s*\(weight:\s*([0-9.]+)\)', line)
         if m:
-            result.append({
-                "name":   m.group(1).strip(),
-                "weight": m.group(2),
-                "hash":   (m.group(3) or "").strip(),
-            })
+            result.append({"name": m.group(1).strip(), "weight": m.group(2)})
             continue
         parts = line.split(":")
         if len(parts) == 2:
-            result.append({"name": parts[0].strip(), "weight": parts[1].strip(), "hash": ""})
+            result.append({"name": parts[0].strip(), "weight": parts[1].strip()})
             continue
-        result.append({"name": line, "weight": "1", "hash": ""})
+        result.append({"name": line, "weight": "1"})
     return result
 
 
@@ -317,10 +339,9 @@ class ScorpiovSaveImage:
             "optional": {
                 # ── All optional — auto-detected from workflow if left blank / 0 ──
                 "loras": ("STRING", {
-                    "multiline":  True,
-                    "forceInput": True,
-                    "default":    "",
-                    "tooltip":    "Wire from Lora Tag Loader \u2192 loras_info, or Image Meta Reader \u2192 loras. Leave unconnected to skip.",
+                    "multiline": True,
+                    "default":   "",
+                    "tooltip":   "Auto-filled if left blank. Or wire from Image Meta Reader → loras.",
                 }),
                 "model_name": ("STRING", {
                     "multiline": False,
@@ -358,20 +379,6 @@ class ScorpiovSaveImage:
                     "default": True,
                     "tooltip": "Uncheck to save a clean PNG with no embedded metadata.",
                 }),
-                # NOTE: model_hash is intentionally the LAST optional field.
-                # ComfyUI stores widget values as a flat positional array per
-                # node ("widgets_values"), matched to this list purely by
-                # order. Inserting a new field anywhere but the end shifts
-                # every field after it, silently corrupting values in any
-                # workflow saved before the change (e.g. seed receiving the
-                # control_after_generate value, cfg receiving an empty
-                # string). Any future new optional field must also be
-                # appended here, never inserted earlier in this dict.
-                "model_hash": ("STRING", {
-                    "multiline": False,
-                    "default":   "",
-                    "tooltip":   "Auto-detected (SHA256 AutoV2) from the checkpoint file the first time it's used, then cached. Override by typing here.",
-                }),
             },
             "hidden": {
                 "prompt":        "PROMPT",
@@ -392,7 +399,6 @@ class ScorpiovSaveImage:
         negative_prompt,
         loras         = "",
         model_name    = "",
-        model_hash    = "",
         vae_name      = "",
         steps         = 0,
         cfg           = 0.0,
@@ -418,17 +424,8 @@ class ScorpiovSaveImage:
         eff_model   = model_name.strip()   or auto["model_name"]
         eff_vae     = vae_name.strip()     or auto["vae_name"]
 
-        # ── Model hash: manual override, else hash the checkpoint file ─────
-        # (cached — only the very first save after a checkpoint changes pays
-        # the hashing cost; every save after that reuses the cached value)
-        eff_model_hash = model_hash.strip()
-        if not eff_model_hash and auto["model_name_raw"]:
-            ckpt_path = folder_paths.get_full_path("checkpoints", auto["model_name_raw"])
-            if ckpt_path:
-                eff_model_hash = get_autov2_hash(ckpt_path)
-
         print(f"[Scorpiov Save] Auto-detected from workflow:")
-        print(f"  Model    : {eff_model} (hash: {eff_model_hash or 'unknown'})   VAE: {eff_vae}")
+        print(f"  Model    : {eff_model}   VAE: {eff_vae}")
         print(f"  Sampler  : {eff_sampler} / {eff_sched}  steps={eff_steps}  cfg={eff_cfg}  seed={eff_seed}")
 
         results = []
@@ -436,28 +433,42 @@ class ScorpiovSaveImage:
         for i, image_tensor in enumerate(images):
 
             # ── Tensor → PIL ──────────────────────────────────────────────
-            arr     = (image_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
-            pil_img = Image.fromarray(arr, mode="RGB")
-            W, H    = pil_img.size
+            # NOTE: Qwen-Image-2.1's VAE decodes to RGBA (4 channels, native
+            # transparency), not RGB. Hardcoding mode="RGB" makes Pillow
+            # silently reinterpret the 4-byte-per-pixel buffer as 3 bytes per
+            # pixel, which is exactly the static/moiré garbage this node used
+            # to produce. Detect the channel count and use the matching mode.
+            arr      = (image_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
+            channels = arr.shape[-1] if arr.ndim == 3 else 1
+            if channels >= 4:
+                # RGBA — keep the alpha channel so transparency survives in the PNG
+                pil_img = Image.fromarray(arr[:, :, :4], mode="RGBA")
+            elif channels == 3:
+                pil_img = Image.fromarray(arr, mode="RGB")
+            elif channels == 1:
+                pil_img = Image.fromarray(arr[:, :, 0], mode="L")
+            else:
+                # Unexpected layout — best effort on first 3 channels
+                pil_img = Image.fromarray(arr[:, :, :3], mode="RGB")
+            W, H     = pil_img.size
 
             # ── Build metadata ─────────────────────────────────────────────
             pnginfo = PngInfo()
 
             if save_metadata:
                 params_text = _build_parameters(
-                    positive   = positive_prompt,
-                    negative   = negative_prompt,
-                    model      = eff_model,
-                    model_hash = eff_model_hash,
-                    vae        = eff_vae,
-                    loras      = loras or "",
-                    steps      = eff_steps,
-                    cfg        = eff_cfg,
-                    sampler    = eff_sampler,
-                    scheduler  = eff_sched,
-                    seed       = eff_seed,
-                    width      = W,
-                    height     = H,
+                    positive  = positive_prompt,
+                    negative  = negative_prompt,
+                    model     = eff_model,
+                    vae       = eff_vae,
+                    loras     = loras or "",
+                    steps     = eff_steps,
+                    cfg       = eff_cfg,
+                    sampler   = eff_sampler,
+                    scheduler = eff_sched,
+                    seed      = eff_seed,
+                    width     = W,
+                    height    = H,
                 )
                 pnginfo.add_text("parameters", params_text)
 

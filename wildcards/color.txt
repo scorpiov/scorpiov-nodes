@@ -1,9 +1,0 @@
-red
-blue
-green
-yellow
-gold
-mauve
-indigo
-violet
-purple

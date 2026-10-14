@@ -1,0 +1,6 @@
+# Keep code files LF on every OS so cross-machine diffs stay honest
+# (the local Windows copies are CRLF; without this rule a sync shows
+# a phantom whole-file diff that is really only line endings).
+*.py text eol=lf
+*.js text eol=lf
+*.md text eol=lf

@@ -16,11 +16,11 @@ function getWidget(node, name) {
     return node.widgets?.find((w) => w.name === name);
 }
 
-function getWildcardFolder(node) {
-    return getWidget(node, "wildcard_folder")?.value ?? "";
-}
-
 // ── Build a styled read-only textarea and attach it as a DOM widget ──────────
+// Sizing is user-controlled: the textarea has a fixed initial height and
+// stays scrollable; we deliberately never resize the node from code (the
+// old auto-grow handler ballooned the small Prompter node after every run
+// and only ever grew it).
 function addPreviewTextarea(node) {
     const container = document.createElement("div");
     container.style.cssText = [
@@ -29,15 +29,65 @@ function addPreviewTextarea(node) {
         "box-sizing: border-box",
     ].join(";");
 
+    // Header row: label left, character count + copy button right
+    const headerRow = document.createElement("div");
+    headerRow.style.cssText = [
+        "display: flex",
+        "align-items: center",
+        "justify-content: space-between",
+        "margin-bottom: 3px",
+    ].join(";");
+
     const label = document.createElement("div");
     label.textContent = "📝 Resolved Prompt";
     label.style.cssText = [
         "font-size: 11px",
-        "color: #999",
-        "margin-bottom: 3px",
+        "color: #9aa4b2",
         "font-family: sans-serif",
         "user-select: none",
     ].join(";");
+
+    const rightGroup = document.createElement("div");
+    rightGroup.style.cssText = [
+        "display: flex",
+        "align-items: center",
+        "gap: 6px",
+    ].join(";");
+
+    const countEl = document.createElement("span");
+    countEl.textContent = "";
+    countEl.title = "Character count of the resolved prompt";
+    countEl.style.cssText = [
+        "font-size: 10px",
+        "color: #9aa4b2",
+        "font-family: sans-serif",
+        "user-select: none",
+    ].join(";");
+
+    const copyBtn = document.createElement("button");
+    copyBtn.textContent = "⧉ Copy";
+    copyBtn.title = "Copy resolved prompt to clipboard";
+    copyBtn.style.cssText = [
+        "font-size: 10px",
+        "padding: 1px 6px",
+        "background: #171a21",
+        "color: #cfd8e3",
+        "border: 1px solid #374151",
+        "border-radius: 3px",
+        "cursor: pointer",
+        "font-family: sans-serif",
+        "outline: none",
+    ].join(";");
+    // Keep ComfyUI from treating the button click as a node drag
+    copyBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    copyBtn.addEventListener("keydown", (e) => e.stopPropagation());
+    copyBtn.onclick = () => copyResolvedPrompt(node, copyBtn);
+
+    rightGroup.appendChild(countEl);
+    rightGroup.appendChild(copyBtn);
+    headerRow.appendChild(label);
+    headerRow.appendChild(rightGroup);
+    container.appendChild(headerRow);
 
     const textarea = document.createElement("textarea");
     textarea.readOnly = true;
@@ -45,10 +95,11 @@ function addPreviewTextarea(node) {
     textarea.rows = 6;
     textarea.style.cssText = [
         "width: 100%",
+        "height: 120px",
         "box-sizing: border-box",
-        "background: #1a1a2e",
-        "color: #aaffaa",
-        "border: 1px solid #444",
+        "background: #171a21",
+        "color: #cfd8e3",
+        "border: 1px solid #374151",
         "border-radius: 4px",
         "padding: 6px 8px",
         "font-size: 11px",
@@ -67,21 +118,60 @@ function addPreviewTextarea(node) {
     textarea.addEventListener("keydown", (e) => e.stopPropagation());
     textarea.addEventListener("mousedown", (e) => e.stopPropagation());
 
-    container.appendChild(label);
     container.appendChild(textarea);
 
     // addDOMWidget renders arbitrary HTML inside the node body
     const widget = node.addDOMWidget("preview_text", "customtext", container, {
         getValue() { return textarea.value; },
-        setValue(v) { textarea.value = v; },
+        setValue(v) { textarea.value = v ?? ""; updatePreviewCount(node); },
         serialize: false,
     });
 
-    // Store a direct reference for fast updates
+    // Store direct references for fast updates
     node._scorpiovPreviewTextarea = textarea;
     node._scorpiovPreviewWidget   = widget;
+    node._scorpiovPreviewCountEl  = countEl;
 
     return widget;
+}
+
+// Refresh the "N chars" counter from the current textarea content.
+function updatePreviewCount(node) {
+    const el = node._scorpiovPreviewCountEl;
+    const ta = node._scorpiovPreviewTextarea;
+    if (!el || !ta) return;
+    const n = ta.value ? ta.value.length : 0;
+    el.textContent = n ? `${n} chars` : "";
+}
+
+function flashCopyButton(btn, text) {
+    const original = "⧉ Copy";
+    btn.textContent = text;
+    setTimeout(() => { btn.textContent = original; }, 1500);
+}
+
+function copyResolvedPrompt(node, btn) {
+    const text = node._scorpiovPreviewTextarea?.value ?? "";
+    if (!text) return;
+    const done = () => flashCopyButton(btn, "✓ Copied");
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(done, () => fallbackCopyToClipboard(text, done));
+    } else {
+        // Non-secure contexts (plain http LAN hosts) don't expose
+        // navigator.clipboard — use the classic hidden-textarea fallback.
+        fallbackCopyToClipboard(text, done);
+    }
+}
+
+function fallbackCopyToClipboard(text, done) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position: fixed; opacity: 0; pointer-events: none;";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* clipboard unavailable */ }
+    ta.remove();
+    done();
 }
 
 // ── Shared setup applied to both wildcard node types ─────────────────────────
@@ -121,7 +211,6 @@ app.registerExtension({
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 node_id: String(node.id),
-                                wildcard_folder: getWildcardFolder(node),
                             }),
                         });
 
@@ -171,17 +260,13 @@ app.registerExtension({
             const node = app.graph.getNodeById(nodeId);
             if (!node || !SCORPIOV_WILDCARD_NODES.includes(node.comfyClass)) return;
 
-            // Update the textarea
+            // Update the textarea and the character count. Node size is
+            // user-controlled — the old auto-grow logic (desiredHeight =
+            // 500 + textHeight) ballooned the small Prompter node after
+            // every run and could only ever grow it.
             if (node._scorpiovPreviewTextarea) {
                 node._scorpiovPreviewTextarea.value = resolvedText;
-            }
-
-            // Auto-size the node height to fit content (capped at +300px)
-            const lineCount    = (resolvedText.match(/\n/g) ?? []).length + 3;
-            const textHeight   = Math.min(lineCount * 16, 300);
-            const desiredHeight = 500 + textHeight;
-            if (node.size[1] < desiredHeight) {
-                node.setSize([node.size[0], desiredHeight]);
+                updatePreviewCount(node);
             }
 
             node.setDirtyCanvas(true, true);

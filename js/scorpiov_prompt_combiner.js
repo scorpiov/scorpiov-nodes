@@ -50,7 +50,17 @@ function anythingInputs(node) {
 }
 
 function nextSlotName(node) {
-  return `anything_${anythingInputs(node).length + 1}`;
+  // Count-based naming (anythingInputs().length + 1) collided after a
+  // middle slot was removed: deleting anything_2 from [1, 2, 3] left
+  // [1, 3], and the next name became anything_3 AGAIN, merging two slots
+  // (and letting a pruned slot's config "reappear" under the duplicate).
+  // Max numeric suffix + 1 never reuses a live name.
+  let max = 0;
+  for (const input of anythingInputs(node)) {
+    const m = /^anything_(\d+)$/i.exec(input.name || "");
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `anything_${max + 1}`;
 }
 
 function ensureTrailingEmptySlot(node) {
@@ -204,13 +214,24 @@ app.registerExtension({
       if (connected) {
         ensureTrailingEmptySlot(this);
       } else {
-        // Clean up stored config for a slot that's been removed by pruning,
-        // so it doesn't silently reappear if a same-named slot is recreated.
-        if (input?.name && this.properties?.scorpiovSlotConfig) {
-          delete this.properties.scorpiovSlotConfig[input.name];
-          syncHiddenConfigWidget(this);
-        }
+        // Prune FIRST, then drop stored config only for slot names that no
+        // longer exist. The old order deleted the disconnected slot's
+        // config immediately, so unplugging a wire to rewire it elsewhere
+        // silently lost that slot's weight/enabled settings. A mere
+        // disconnect keeps the config; only a pruned-away slot is cleaned
+        // up (so it can't haunt a same-named slot recreated later).
         pruneTrailingEmptySlots(this);
+        const remaining = new Set(anythingInputs(this).map((i) => i.name));
+        if (this.properties?.scorpiovSlotConfig) {
+          let changed = false;
+          for (const name of Object.keys(this.properties.scorpiovSlotConfig)) {
+            if (!remaining.has(name)) {
+              delete this.properties.scorpiovSlotConfig[name];
+              changed = true;
+            }
+          }
+          if (changed) syncHiddenConfigWidget(this);
+        }
       }
     };
   },

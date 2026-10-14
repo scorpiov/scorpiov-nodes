@@ -1,0 +1,20 @@
+# Realism / photography styles — a small curated starter set for the Scorpiov wildcard nodes.
+# Reference in a prompt as __realism_styles__. One style per line; # starts a comment.
+Golden hour portrait photography, warm low sun backlighting, glowing rim light on hair, soft lens flare, creamy bokeh, honeyed skin tones, dreamy romantic glow
+Blue hour city photography, deep cobalt twilight sky, city lights just switching on, long exposure light trails, crisp silhouettes, moody urban calm
+Rembrandt studio portrait lighting, single softbox at 45 degrees, triangle of light on the shadowed cheek, deep velvety background, classical painterly drama
+High-key fashion photography, bright even studio lighting, seamless white background, airy overexposed whites, clean minimal shadows, crisp editorial polish
+Low-key noir photography, single hard light source in darkness, deep black shadows, dramatic sculpted highlights, smoky mysterious atmosphere
+Natural window light portrait, soft directional daylight from a large window, gentle falloff into shadow, intimate quiet mood, delicate skin tones
+Night street photography, sodium-vapor orange glow, wet asphalt reflections, candid motion blur, grainy high-ISO grit, raw urban energy
+Long exposure night photography, star trails and milky way, silky smooth water, light-painted foreground, deep indigo sky, otherworldly stillness
+Macro photography, extreme close-up detail, razor-thin depth of field, crisp focus stacking, diffused ring-flash lighting, jewel-like textures
+Aerial drone photography, sweeping top-down perspective, crisp midday light, tiny human scale against vast landscapes, geometric patterns, epic overview
+Documentary photojournalism, raw available light only, candid unposed moments, honest unretouched realism, emotional immediacy, gritty authenticity
+Backlit wedding photography, soft romantic flare through the veil, golden rim light, dreamy shallow depth of field, warm joyful glow
+Kodachrome vintage film photography, rich saturated reds, fine grain, slightly faded nostalgic color, 1960s slide-film warmth
+Wet plate tintype photography, antique silvery tones, long-exposure softness, vignetted edges, 19th-century portrait gravity, handcrafted imperfection
+Architectural interior photography, symmetrical composition, warm tungsten interiors against blue-hour windows, crisp lines, luxurious calm
+Studio product photography, softbox lighting, seamless gradient background, tack-sharp detail, clean commercial precision, subtle reflections
+Milky way astrophotography, dark pristine sky, galactic core glowing, silhouetted foreground landscape, long exposure clarity, cosmic awe
+Single-source neon rim lighting portrait, near-black background, one neon light source raking across the subject from the side, razor-sharp glowing edge tracing cheek, shoulder and hair, deep crushing shadows swallowing the unlit side, hard pronounced light-shadow distinction, cinematic chiaroscuro mood

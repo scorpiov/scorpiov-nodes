@@ -15,11 +15,18 @@ import { api } from "../../scripts/api.js";
 
 const NODE_NAME = "ScorpiovMultiCheckpointLoader";
 
-// Checkpoint list is the same for every instance of this node, so fetch
-// it once and cache the promise rather than hitting the API per node.
+// Checkpoint list is the same for every instance of this node, so cache
+// it module-wide — but with a short TTL. A forever-cache meant checkpoint
+// files added to the folder never appeared until a full page reload;
+// 30 seconds is cheap enough to stay fresh without spamming /object_info.
+const CHECKPOINT_LIST_TTL_MS = 30_000;
 let _ckptListPromise = null;
+let _ckptListFetchedAt = 0;
+
 function getCheckpointList() {
-  if (!_ckptListPromise) {
+  const now = Date.now();
+  if (!_ckptListPromise || now - _ckptListFetchedAt > CHECKPOINT_LIST_TTL_MS) {
+    _ckptListFetchedAt = now;
     _ckptListPromise = api
       .fetchApi("/object_info/CheckpointLoaderSimple")
       .then((r) => r.json())

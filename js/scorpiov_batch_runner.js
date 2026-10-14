@@ -64,6 +64,20 @@ async function resetWildcardState(nodeId) {
   });
 }
 
+// A checkpoint slot's tag becomes a path segment of filename_prefix, so it
+// must never be empty/undefined. Normally the Multi-Checkpoint Loader UI
+// always supplies a tag, but config JSON restored from an edited workflow
+// (or a cleared tag field) can leave it blank — fall back to a sanitized
+// checkpoint basename in that case.
+function tagForSlot(slot) {
+  if (slot.tag && String(slot.tag).trim()) return String(slot.tag).trim();
+  const base = String(slot.ckpt_name || "")
+    .split(/[\\/]/)
+    .pop()
+    .replace(/\.[^/.]+$/, ""); // strip extension
+  return base.replace(/[^a-zA-Z0-9_-]+/g, "-") || "ckpt";
+}
+
 async function runBatch(setStatus) {
   const wpResult = findSingle("ScorpiovWildcardPrompter");
   if (wpResult.error) return setStatus("\u274c " + wpResult.error);
@@ -130,17 +144,18 @@ async function runBatch(setStatus) {
 
   for (let s = 0; s < slots.length; s++) {
     const slot = slots[s];
+    const tag = tagForSlot(slot); // never empty — safe as a path segment
     for (let i = 0; i < lineCount; i++) {
       const line = i + 1;
       checkpointIndexWidget.value = s;
-      filenameWidget.value = `%date:yyyy-MM-dd%/${slot.tag}/${String(line).padStart(3, "0")}-${slot.tag}`;
+      filenameWidget.value = `%date:yyyy-MM-dd%/${tag}/${String(line).padStart(3, "0")}-${tag}`;
       mcl.setDirtyCanvas(true, true);
       save.setDirtyCanvas(true, true);
 
       try {
         await app.queuePrompt(0, 1);
       } catch (err) {
-        return setStatus(`\u274c Submission failed at checkpoint "${slot.tag}", line ${line}: ${err}`);
+        return setStatus(`\u274c Submission failed at checkpoint "${tag}", line ${line}: ${err}`);
       }
       submitted++;
       setStatus(`Submitting ${submitted} / ${total}...`);

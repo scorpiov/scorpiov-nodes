@@ -32,7 +32,16 @@ function isAnywhereNode(node) {
 }
 
 function nextAnywhereSlotName(node) {
-  return `anything_${(node.inputs?.length ?? 0) + 1}`;
+  // Count-based naming (inputs.length + 1) collided after a middle slot
+  // was removed: deleting anything_2 from [1, 2, 3] left [1, 3], and the
+  // next name became anything_3 AGAIN, silently merging two slots.
+  // Max numeric suffix + 1 never reuses a live name.
+  let max = 0;
+  for (const input of node.inputs || []) {
+    const m = /^anything_(\d+)$/i.exec(input.name || "");
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `anything_${max + 1}`;
 }
 
 function ensureTrailingEmptySlot(node) {
@@ -90,8 +99,21 @@ function setPersistedLabel(node, inputName, value) {
 // 2. "Any-node broadcasting" -- flag an arbitrary node's outputs
 // ---------------------------------------------------------------------
 
+// The broadcast flag lives in node.properties (NOT as a bare instance
+// property like node.scorpiovBroadcast): only `properties` round-trips
+// through workflow save/load — a bare property silently vanished on
+// every reload, forcing the user to re-flag nodes each session.
+function getBroadcastFlag(node) {
+  return node.properties?.scorpiovBroadcast === true;
+}
+
+function setBroadcastFlag(node, value) {
+  node.properties = node.properties || {};
+  node.properties.scorpiovBroadcast = !!value;
+}
+
 function toggleBroadcastFlag(node) {
-  node.scorpiovBroadcast = !node.scorpiovBroadcast;
+  setBroadcastFlag(node, !getBroadcastFlag(node));
   node.setDirtyCanvas(true, true);
 }
 
@@ -100,7 +122,7 @@ function toggleBroadcastFlag(node) {
 // ---------------------------------------------------------------------
 
 function drawBroadcastBadge(node, ctx) {
-  const isSource = isAnywhereNode(node) || node.scorpiovBroadcast === true;
+  const isSource = isAnywhereNode(node) || getBroadcastFlag(node);
   if (!isSource) return;
   ctx.save();
   ctx.beginPath();
@@ -157,7 +179,7 @@ function collectBroadcastSources(graph) {
           colorKey: `${node.id}:${slotIndex}`,
         });
       });
-    } else if (node.scorpiovBroadcast === true) {
+    } else if (getBroadcastFlag(node)) {
       (node.outputs || []).forEach((output, slotIndex) => {
         sources.push({
           nodeId: node.id,
@@ -387,7 +409,7 @@ function drawScorpiovSelectionWires(ctx) {
     if (!selNode) continue;
 
     // (a) selected node is a broadcaster -> wires out to every endpoint it feeds
-    if (isAnywhereNode(selNode) || selNode.scorpiovBroadcast === true) {
+    if (isAnywhereNode(selNode) || getBroadcastFlag(selNode)) {
       for (const [key, source] of winners.entries()) {
         if (source.broadcasterNodeId !== selNode.id) continue;
         const [targetIdStr, inputName] = key.split("::");
@@ -506,7 +528,7 @@ app.registerExtension({
       origGetExtraMenuOptions?.apply(this, arguments);
       if (nodeData.name === ANYWHERE_TYPE) return; // doesn't need the toggle on itself
       options.push({
-        content: this.scorpiovBroadcast
+        content: getBroadcastFlag(this)
           ? "Remove Scorpiov Broadcasting"
           : "Add Scorpiov Broadcasting",
         callback: () => toggleBroadcastFlag(this),

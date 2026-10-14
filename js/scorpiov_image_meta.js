@@ -31,7 +31,7 @@ function addMetaPanel(node) {
     statusBar.textContent = "Run the workflow (or click Read Metadata Now) to populate.";
     statusBar.style.cssText = [
         "font-size: 10px",
-        "color: #6b7280",
+        "color: #9aa4b2",
         "font-style: italic",
         "margin-bottom: 4px",
         "font-family: sans-serif",
@@ -46,10 +46,11 @@ function addMetaPanel(node) {
     textarea.placeholder = "(metadata will appear here)";
     textarea.style.cssText = [
         "width: 100%",
+        "height: 260px",
         "box-sizing: border-box",
-        "background: #0f172a",
-        "color: #e2e8f0",
-        "border: 1px solid #334155",
+        "background: #171a21",
+        "color: #cfd8e3",
+        "border: 1px solid #374151",
         "border-radius: 4px",
         "padding: 8px 10px",
         "font-size: 11px",
@@ -79,8 +80,9 @@ function addMetaPanel(node) {
 
     node._scorpiovMeta = { statusBar, textarea };
 
-    // Start tall enough to be useful
-    node.setSize([node.size[0], Math.max(node.size[1], 540)]);
+    // Node size is user-controlled: no forced minimum height here, and
+    // setDisplay() deliberately never resizes the node — the old auto-grow
+    // logic kept ballooning the node on every run.
 }
 
 // ── Fill the textarea with formatted text ────────────────────────────────────
@@ -92,13 +94,7 @@ function setDisplay(node, text, statusText = "", isError = false) {
     p.statusBar.textContent = statusText || "✅ Done";
     p.statusBar.style.color = isError ? "#f87171" : "#34d399";
 
-    // Auto-grow node height to show content without scrolling (capped at +400px)
-    const lineCount   = (text.match(/\n/g) ?? []).length + 2;
-    const textHeight  = Math.min(lineCount * 17, 500);
-    const desiredH    = 300 + textHeight;
-    if (node.size[1] < desiredH) {
-        node.setSize([node.size[0], desiredH]);
-    }
+    // Deliberately no auto-grow here: node height is the user's business.
 
     node.setDirtyCanvas(true, true);
 }

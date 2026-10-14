@@ -44,7 +44,7 @@ app.registerExtension({
                 lbl.textContent = `${icon} ${labelText}`;
                 lbl.style.cssText = [
                     "font-size: 10px",
-                    "color: #6b7280",
+                    "color: #9aa4b2",
                     "user-select: none",
                     "margin-bottom: 1px",
                 ].join(";");
@@ -56,7 +56,7 @@ app.registerExtension({
                 field.style.cssText = [
                     "width: 100%",
                     "box-sizing: border-box",
-                    "background: #111827",
+                    "background: #171a21",
                     "color: #93c5fd",
                     "border: 1px solid #374151",
                     "border-radius: 3px",

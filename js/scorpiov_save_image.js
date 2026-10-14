@@ -6,8 +6,9 @@
  *      auto-detected override fields (model_name, vae_name, steps, cfg,
  *      sampler_name, scheduler) by default, since they only matter when
  *      you're manually overriding what the workflow graph already
- *      auto-detects (see dev reference §4.3). seed, control_after_generate,
- *      save_metadata, and model_hash stay visible.
+ *      auto-detects (see dev reference §4.3). seed, loras, and
+ *      save_metadata stay visible. (There is no model_hash widget — the
+ *      model hash is computed server-side into the saved metadata.)
  *   2. A preview panel below the save node showing the full path of the
  *      last saved file, and a small status bar confirming metadata was
  *      embedded.
@@ -119,7 +120,7 @@ app.registerExtension({
             node._scorpiovAdvancedToggle = toggleWidget;
 
             // IMPORTANT: this button is intentionally left wherever
-            // addWidget naturally appends it (after model_hash, the last
+            // addWidget naturally appends it (after save_metadata, the last
             // optional field) rather than spliced up above model_name.
             // Splicing a widget into the MIDDLE of node.widgets shifts
             // every widget after it by one array slot, which corrupts
@@ -144,7 +145,7 @@ app.registerExtension({
             statusBar.textContent = "No image saved yet.";
             statusBar.style.cssText = [
                 "font-size: 10px",
-                "color: #6b7280",
+                "color: #9aa4b2",
                 "font-style: italic",
                 "margin-bottom: 4px",
                 "font-family: sans-serif",
@@ -158,9 +159,9 @@ app.registerExtension({
             pathField.style.cssText = [
                 "width: 100%",
                 "box-sizing: border-box",
-                "background: #0f172a",
+                "background: #171a21",
                 "color: #93c5fd",
-                "border: 1px solid #334155",
+                "border: 1px solid #374151",
                 "border-radius: 3px",
                 "padding: 3px 6px",
                 "font-size: 11px",

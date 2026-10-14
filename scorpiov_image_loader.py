@@ -13,8 +13,14 @@ The file-picker widget behaves identically to ComfyUI's built-in Load Image
 node — you get the thumbnail preview, the upload button, and the folder browser.
 
 Supports: PNG, JPG/JPEG, WEBP, BMP, GIF (first frame), TIFF.
-Alpha channels are silently dropped (converted to RGB). If you need the mask
-output, use ComfyUI's built-in Load Image node instead.
+Modes with real alpha (RGBA, LA, palette images carrying a 'transparency'
+chunk) are flattened onto white; every other mode converts to RGB.
+If you need the mask output, use ComfyUI's built-in Load Image node instead.
+
+REFACTOR NOTE (Oct 14, 2026): the widget list is scanned recursively so
+subfolders show up as "sub/image.png"; images load through a context
+manager (no leaked file handles on Windows); IS_CHANGED hashes the file
+in 8 MB chunks instead of reading it whole into RAM.
 """
 
 import os
@@ -72,10 +78,16 @@ def _resolve_input_path(filename: str) -> str:
 def _pil_to_tensor(pil_img: Image.Image) -> torch.Tensor:
     """Convert a PIL Image to a ComfyUI-compatible IMAGE tensor."""
 
-    # Ensure we always work in RGB (flatten alpha onto white background)
-    if pil_img.mode == "RGBA":
-        background = Image.new("RGB", pil_img.size, (255, 255, 255))
-        background.paste(pil_img, mask=pil_img.split()[3])   # alpha channel as mask
+    # Anything with real alpha (RGBA, LA, palette-plus-transparency chunk)
+    # is flattened onto a white background first so a semi-transparent PNG
+    # looks in the tensor the way it does in an image viewer; everything
+    # else converts straight to RGB. (Converting to RGBA first keeps the
+    # flattening path identical for all alpha-bearing modes.)
+    if (pil_img.mode in ("RGBA", "LA", "PA")
+            or (pil_img.mode == "P" and "transparency" in pil_img.info)):
+        rgba = pil_img.convert("RGBA")
+        background = Image.new("RGB", rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.split()[3])   # alpha channel as mask
         pil_img = background
     elif pil_img.mode != "RGB":
         pil_img = pil_img.convert("RGB")
@@ -107,9 +119,15 @@ class ScorpiovImageLoader:
         image_extensions = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif"}
         files = []
         if os.path.isdir(input_dir):
-            for f in os.listdir(input_dir):
-                if os.path.splitext(f)[1].lower() in image_extensions:
-                    files.append(f)
+            # Recursive scan so subfolders are pickable too. Widget values
+            # use forward-slash relative paths ("sub/image.png"), which
+            # _resolve_input_path handles via get_annotated_filepath.
+            for root, dirs, filenames in os.walk(input_dir):
+                dirs.sort()
+                for f in sorted(filenames):
+                    if os.path.splitext(f)[1].lower() in image_extensions:
+                        rel = os.path.relpath(os.path.join(root, f), input_dir)
+                        files.append(rel.replace(os.sep, "/"))
         files = sorted(files) or [""]   # widget needs at least one entry
 
         return {
@@ -143,8 +161,12 @@ class ScorpiovImageLoader:
             return (dummy, image, "")
 
         # ── Load and convert ──────────────────────────────────────────────
-        pil_img   = Image.open(full_path)
-        tensor    = _pil_to_tensor(pil_img)
+        # Context manager: Pillow closes the file handle on exit, so on
+        # Windows the file can be moved/renamed/deleted while ComfyUI is
+        # still running. (The tensor is built from a numpy copy, so it
+        # stays valid after the handle closes.)
+        with Image.open(full_path) as pil_img:
+            tensor = _pil_to_tensor(pil_img)
 
         # ── Build output strings ──────────────────────────────────────────
         filename  = os.path.basename(full_path)      # e.g. "photo.png"
@@ -166,9 +188,13 @@ class ScorpiovImageLoader:
         """
         try:
             full_path = _resolve_input_path(image)
+            # Chunked hashing: a multi-GB TIFF should never be read whole
+            # into RAM just to check whether the file changed.
+            digest = hashlib.md5()
             with open(full_path, "rb") as f:
-                file_hash = hashlib.md5(f.read()).hexdigest()
-            return file_hash
+                for chunk in iter(lambda: f.read(8 * 1024 * 1024), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
         except Exception:
             return float("nan")   # always re-run if we can't hash
 

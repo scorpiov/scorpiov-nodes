@@ -24,12 +24,11 @@ Python -- only widgets are. So the JS extension mirrors every slot's
 hidden widget -- not node.properties -- is what this class actually
 reads below. It is not meant to be edited by hand.
 
-KNOWN EDGE CASE TO TEST: if you combine CONDITIONING from prompts that
-were encoded with very different token lengths, the weighted-average
-step below may need padding logic (ComfyUI's own ConditioningAverage
-node has to handle this too). Flagging this now rather than solving it
-speculatively -- report the actual error if/when it comes up and we'll
-fix it against the real shapes involved.
+KNOWN EDGE CASE (handled Oct 14, 2026): combining CONDITIONING encoded
+at different token lengths used to truncate everything to the FIRST
+input's length. _merge_conditioning now aligns UP to the LONGEST token
+length (zero-padding shorter inputs) — no conditioning content is ever
+truncated away anymore.
 """
 
 import json
@@ -110,9 +109,20 @@ class ScorpiovPromptCombiner:
                 continue
 
             slot_cfg = config.get(name, {})
+            if not isinstance(slot_cfg, dict):
+                # Hand-edited scorpiov_config can put a non-object on a
+                # slot — treat it as unconfigured rather than crashing.
+                slot_cfg = {}
             if not slot_cfg.get("enabled", True):
                 continue
-            weight = float(slot_cfg.get("weight", 1.0))
+            try:
+                weight = float(slot_cfg.get("weight", 1.0))
+            except (TypeError, ValueError):
+                # A hand-typed weight like "heavy" can't reach float() —
+                # fall back to 1.0 with a warning instead of killing the run.
+                print(f"[Scorpiov Prompt Combiner] WARNING: bad weight for "
+                      f"slot '{name}' in scorpiov_config — using 1.0.")
+                weight = 1.0
 
             if isinstance(value, str):
                 if value != "":
@@ -128,14 +138,39 @@ class ScorpiovPromptCombiner:
                         string_parts.append(value)
             elif isinstance(value, list) and value and isinstance(value[0], (list, tuple)):
                 # ComfyUI's CONDITIONING type is a list of [tensor, extras_dict] pairs.
-                for cond_tensor, cond_extra in value:
+                for entry in value:
+                    # Guard against malformed entries (an upstream node
+                    # handing back something that isn't a (tensor, dict)
+                    # pair) — skip with a warning instead of an unpack
+                    # ValueError mid-queue.
+                    try:
+                        cond_tensor, cond_extra = entry
+                    except (TypeError, ValueError):
+                        print(f"[Scorpiov Prompt Combiner] WARNING: skipping "
+                              f"malformed conditioning entry on slot '{name}'.")
+                        continue
+                    if not isinstance(cond_extra, dict):
+                        print(f"[Scorpiov Prompt Combiner] WARNING: skipping "
+                              f"conditioning entry with non-dict extras on "
+                              f"slot '{name}'.")
+                        continue
                     conditioning_items.append((cond_tensor, cond_extra, weight))
             # Anything else (an unexpected/unsupported type on a slot) is
             # silently skipped -- this node only knows how to merge STRING
             # and CONDITIONING.
 
         merged_string = separator.join(string_parts)
-        merged_conditioning = self._merge_conditioning(conditioning_items)
+        try:
+            merged_conditioning = self._merge_conditioning(conditioning_items)
+        except Exception as e:
+            # A shape/batch mismatch between conditioning inputs must not
+            # kill the whole queue — degrade to the first input's
+            # conditioning with a warning so the user sees something real
+            # instead of a red stack trace.
+            print(f"[Scorpiov Prompt Combiner] WARNING: conditioning merge "
+                  f"failed ({e}); falling back to the first input.")
+            merged_conditioning = (self._merge_conditioning(conditioning_items[:1])
+                                   if conditioning_items else [])
 
         return (merged_string, merged_conditioning)
 
@@ -149,17 +184,16 @@ class ScorpiovPromptCombiner:
 
         total_weight = sum(w for _, _, w in items) or 1.0
         base_tensor, base_extra, base_weight = items[0]
-        # Match ComfyUI's own ConditioningAverage: align every tensor to a
-        # single target token length (truncate longer ones, zero-pad
-        # shorter ones) before blending, rather than assuming all inputs
-        # were encoded to the same length.
-        target_len = base_tensor.shape[1]
+        # Align every tensor UP to the longest token length in the set:
+        # shorter inputs get zero-padded, longer ones are kept whole. We
+        # never truncate — cutting tokens off a conditioning silently drops
+        # prompt content, which is the bug this used to have (fixed Oct
+        # 2026, alongside ComfyUI's own ConditioningAverage behavior).
+        target_len = max(t.shape[1] for t, _, _ in items)
 
         def align_len(t):
             if t.shape[1] == target_len:
                 return t
-            if t.shape[1] > target_len:
-                return t[:, :target_len]
             pad = torch.zeros(
                 (t.shape[0], target_len - t.shape[1], t.shape[2]),
                 dtype=t.dtype,

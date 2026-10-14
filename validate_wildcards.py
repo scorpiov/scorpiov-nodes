@@ -25,6 +25,8 @@ import os
 
 
 # ── Comment stripping (kept in sync with scorpiov_wildcard.py) ─────────────
+# Rules: '#' starts a to-end-of-line comment; '\#' is an escape producing a
+# literal '#'; '/*' ... '*/' are block comments recognised anywhere.
 def strip_comments_from_lines(lines):
     out = []
     in_block = False
@@ -32,32 +34,31 @@ def strip_comments_from_lines(lines):
         line = raw.rstrip("\n")
         kept = []
         i = 0
-        while i < len(line):
+        n = len(line)
+        while i < n:
             if in_block:
                 end_idx = line.find("*/", i)
                 if end_idx == -1:
-                    i = len(line)
+                    i = n
                 else:
                     in_block = False
                     i = end_idx + 2
                 continue
 
-            start_idx = line.find("/*", i)
-            hash_idx = line.find("#", i)
-            candidates = [x for x in (start_idx, hash_idx) if x != -1]
-            if not candidates:
-                kept.append(line[i:])
-                i = len(line)
+            ch = line[i]
+            if ch == "\\" and i + 1 < n and line[i + 1] == "#":
+                kept.append("#")
+                i += 2
                 continue
-
-            cut = min(candidates)
-            kept.append(line[i:cut])
-
-            if cut == hash_idx and (start_idx == -1 or hash_idx < start_idx):
-                i = len(line)
-            else:
+            if ch == "#":
+                i = n
+                continue
+            if ch == "/" and i + 1 < n and line[i + 1] == "*":
                 in_block = True
-                i = cut + 2
+                i += 2
+                continue
+            kept.append(ch)
+            i += 1
 
         cleaned = "".join(kept).strip()
         if cleaned:

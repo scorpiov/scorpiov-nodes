@@ -29,6 +29,15 @@ content still hits the cache, while a same-name content swap correctly
 triggers a fresh real hash.
 
 Cache file lives at: scorpiov-nodes/.scorpiov_hash_cache.json
+
+STORAGE SAFETY
+--------------
+_save_cache writes through a ".tmp" file and renames it into place
+(os.replace), so a crash mid-write can never leave a half-written JSON
+behind. And get_autov2_hash re-checks the content fingerprint AFTER the
+full hash — a file swapped mid-hash is still returned with its computed
+hash, but it is never stored in the cache under the wrong key (a stale
+entry there would lie forever, so the pairing is simply not cached).
 """
 
 import os
@@ -60,9 +69,15 @@ def _load_cache() -> dict:
 
 
 def _save_cache():
+    # Atomic write: build the file under a temp name, then rename it into
+    # place. os.replace is atomic on both POSIX and Windows, so a crash
+    # or power cut mid-write leaves either the old cache or the new one —
+    # never a half-written JSON blob that _load_cache would choke on.
+    tmp = CACHE_FILE + ".tmp"
     try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(_cache, f, indent=2)
+        os.replace(tmp, CACHE_FILE)
     except Exception as e:
         print(f"[Scorpiov Hash] Could not write cache file: {e}")
 
@@ -121,10 +136,25 @@ def get_autov2_hash(filepath: str) -> str:
 
     autov2 = sha256.hexdigest()[:10]
 
-    # Store the path alongside the hash purely for human debugging when
-    # reading the cache file — lookups never use it.
-    cache[key] = {"hash": autov2, "last_seen_path": filepath}
-    _save_cache()
+    # Re-check the content fingerprint AFTER the (slow) full hash: if the
+    # file was swapped or rewritten mid-read, the hash we computed
+    # describes different bytes than the cache key — never store that
+    # pairing, or the cache would serve a wrong hash for this fingerprint
+    # forever. The computed hash is still returned; it's just not cached.
+    try:
+        size_after = os.path.getsize(filepath)
+        key_after = _content_fingerprint(filepath, size_after)
+    except OSError:
+        key_after = None
+
+    if key_after == key:
+        # Store the path alongside the hash purely for human debugging when
+        # reading the cache file — lookups never use it.
+        cache[key] = {"hash": autov2, "last_seen_path": filepath}
+        _save_cache()
+    else:
+        print(f"[Scorpiov Hash] WARNING: '{os.path.basename(filepath)}' "
+              f"changed during hashing — hash computed but NOT cached.")
 
     print(f"[Scorpiov Hash] {os.path.basename(filepath)} -> {autov2}")
     return autov2

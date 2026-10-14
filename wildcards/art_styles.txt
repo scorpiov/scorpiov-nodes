@@ -1,0 +1,26 @@
+# Art styles — a small curated starter set for the Scorpiov wildcard nodes.
+# Reference in a prompt as __art_styles__. One style per line; # starts a comment.
+Line art, clean lines, light shading, crisp black contour inkwork on white paper, delicate flat color washes, subtle crosshatching for volume, airy uncluttered composition, elegant and minimalist
+Watercolor storybook illustration, soft translucent washes, visible paper texture, loose painterly edges, gentle pastel palette, warm nostalgic children's-book charm
+Thick oil painting, impasto, heavy visible brushstrokes, rich textured paint layers, dramatic chiaroscuro lighting, deep saturated colors, classical gallery canvas feel
+Sumi-e ink wash, monochrome black ink on rice paper, bold expressive brushstrokes, vast negative space, minimalist Zen composition, poetic and meditative
+Ukiyo-e woodblock print, flat planes of color, bold outlined figures, stylized waves and clouds, limited traditional palette of indigo, ochre and crimson, textured paper grain
+Art Nouveau illustration, flowing organic curves, ornate floral borders, elongated elegant figures, muted jewel tones with gold accents, Mucha-style decorative detail
+Dark gothic oil painting, moody candlelit scenes, deep blacks and blood reds, romantic decay, ornate baroque details, dramatic emotional atmosphere
+Cyberpunk neon digital art, rain-slicked neon streets, holographic signage, magenta and cyan glow against deep blue shadows, cinematic haze, high-detail futuristic grit
+Flat vector illustration, clean geometric shapes, bold solid colors, no gradients, minimal shadows, modern infographic style, crisp and playful
+Low-poly 3D render, faceted geometric surfaces, stylized minimal detail, soft ambient occlusion, dreamy gradient sky, indie-game charm
+Hyperreal pencil drawing, graphite on textured paper, meticulous fine detail, soft tonal blending, lifelike skin and fabric, monochrome mastery
+Charcoal sketch, gestural, rough expressive strokes, smudged shadows, raw unfinished energy, dramatic contrast on toned paper, artist's-study feel
+Crosshatch engraving, fine copperplate line work, dense parallel hatching, antique print aesthetic, sepia tones, 19th-century scientific illustration precision
+Impressionist plein air, broken dabs of pure color, captured fleeting light, soft unfocused edges, joyful outdoor atmosphere, Monet-style luminosity
+Anime cel-shaded, clean black lineart, flat vibrant colors with sharp cel shadows, detailed expressive eyes, dynamic speed lines, studio-quality keyframe polish
+Ghibli-inspired background art, lush hand-painted landscapes, soft diffused daylight, incredible cloud detail, nostalgic rural warmth, painterly and alive
+Paper-cut collage, layered colored paper shapes, visible cut edges and depth shadows, folk-art simplicity, textured matte surfaces, storybook craft aesthetic
+Stained glass art, leaded panel divisions, glowing jewel-toned glass, radiant backlit colors, medieval cathedral motifs, luminous sacred geometry
+Baroque chiaroscuro, extreme light-dark contrast, theatrical spotlighting, rich velvety shadows, dramatic emotional staging, Caravaggio-style intensity
+Alla prima wet-on-wet oil, loose blended brushwork painted in one session, soft happy accidents, luminous landscape skies, Bob Ross-style serene nature
+Cubist painting, fractured geometric planes, multiple viewpoints at once, muted ochres and grays, Picasso-style intellectual play
+Romantic sublime landscape, dramatic stormy skies, tiny figures against vast nature, Turner-style atmospheric light, awe and melancholy
+Chinese shan shui landscape, misty mountains in ink and light color, tiny scholar figures, vast empty sky, contemplative scroll composition
+Ghibli-style anime background art, lush hand-painted scenery, towering hyper-detailed cumulonimbus clouds dominating a deep cobalt sky, impossibly vibrant saturated color, crystal-clear turquoise water revealing coral and fish below the surface, idyllic coastal villages and island cafes with meticulous architectural detail, nostalgic sun-drenched warmth, dreamlike serene stillness, Makoto Shinkai lighting

@@ -31,7 +31,8 @@ No extra Python dependencies beyond what ComfyUI already ships with.
 
 ### Wildcard Processor 🎲
 
-<img width="1050" height="728" alt="Screenshot 2026-07-31 214155" src="https://github.com/user-attachments/assets/0c4b9fa2-a349-40a1-811e-403151acd593" />
+<img width="1176" height="572" alt="wildcard-Processor" src="https://github.com/user-attachments/assets/4dee0480-8840-4b16-b0ec-b7bd2f487855" />
+
 
 All-in-one wildcard processor with LoRA loading, serial/random modes, and prompt preview.
 
@@ -49,7 +50,7 @@ All-in-one wildcard processor with LoRA loading, serial/random modes, and prompt
 
 ### Wildcard Prompter 📝
 
-<img width="1347" height="827" alt="image" src="https://github.com/user-attachments/assets/d56cb04b-f154-4961-9fad-cf498366fd85" />
+<img width="1457" height="765" alt="Wildcard-Prompter" src="https://github.com/user-attachments/assets/e6a404f9-0c31-442a-9660-4546d4cba0c8" />
 
 
 Text-only variant of the Wildcard Processor — no `model`/`clip` inputs, no LoRA loading. Just resolves wildcards and outputs the string, so you can feed it into a Lora Tag Loader or CLIPTextEncode. Useful when you want to build your prompt text before deciding what to do with it. Same comment support and Highlighted Preview as the Wildcard Processor.
